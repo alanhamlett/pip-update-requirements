@@ -86,10 +86,12 @@ def get_requirements_and_latest(filename):
                                               line_number, session=session))
             if len(reqs) > 0:
                 req = reqs[0]
+                spec_ver = None
                 try:
-                    spec_ver = Version(req.req.specs[0][1])
+                    if req and req.req:
+                        spec_ver = Version(req.req.specs[0][1])
                 except IndexError:
-                    spec_ver = None
+                    pass
                 if spec_ver:
                     latest_ver = latest_version(req, session)
                     yield (line, req, spec_ver, latest_ver)
