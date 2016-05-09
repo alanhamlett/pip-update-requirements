@@ -15,6 +15,8 @@ packages = [
     __title__,
 ]
 
+install_requires = [x.strip() for x in open('requirements.txt').readlines()]
+
 setup(
     name=__title__,
     version=__version__,
@@ -29,6 +31,7 @@ setup(
     include_package_data=True,
     zip_safe=False,
     platforms='any',
+    install_requires=install_requires,
     entry_points={
         'console_scripts': ['pur = pur.__init__:pur'],
     },
