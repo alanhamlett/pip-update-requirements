@@ -77,12 +77,11 @@ def get_requirements_and_latest(filename):
     session = PipSession()
 
     url, content = get_file_content(filename, session=session)
-    lines = req_file.join_lines(enumerate(content.splitlines(), start=1))
-    for line_number, line in lines:
-        stripped_line = req_file.COMMENT_RE.sub('', line)
-        stripped_line = stripped_line.strip()
-        if stripped_line:
-            reqs = list(req_file.process_line(stripped_line, filename,
+    for orig_line, line_number, line in yield_lines(content):
+        line = req_file.COMMENT_RE.sub('', line)
+        line = line.strip()
+        if line:
+            reqs = list(req_file.process_line(line, filename,
                                               line_number, session=session))
             if len(reqs) > 0:
                 req = reqs[0]
@@ -94,13 +93,19 @@ def get_requirements_and_latest(filename):
                     pass
                 if spec_ver:
                     latest_ver = latest_version(req, session)
-                    yield (line, req, spec_ver, latest_ver)
+                    yield (orig_line, req, spec_ver, latest_ver)
                 else:
-                    yield (line, None, None, None)
+                    yield (orig_line, None, None, None)
             else:
-                yield (line, None, None, None)
+                yield (orig_line, None, None, None)
         else:
-            yield (line, None, None, None)
+            yield (orig_line, None, None, None)
+
+
+def yield_lines(content):
+    lines = content.splitlines()
+    for line_number, line in req_file.join_lines(enumerate(lines)):
+        yield (lines[line_number], line_number + 1, line)
 
 
 def latest_version(req, session, include_prereleases=False):
