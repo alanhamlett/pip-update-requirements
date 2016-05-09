@@ -53,7 +53,7 @@ class BaseTestCase(utils.TestCase):
             expected_output = "Updated flask: 0.9 -> 0.10.1\nAll requirements up-to-date.\n"
             self.assertEquals(u(result.output), u(expected_output))
             self.assertEquals(result.exit_code, 0)
-            expected_requirements = "flask==0.10.1\nflask==12.0\n\n-r another-requirements.txt\n\n-e git://github.com/kennethreitz/inbox.py.git@551b4f44b144564504c687cebdb4c543cb8e9adf#egg=inbox\n"
+            expected_requirements = open('tests/samples/output/test_updates_package').read()
             self.assertEquals(open(requirements).read(), expected_requirements)
 
     def test_updates_package_to_output_file(self):
