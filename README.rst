@@ -16,7 +16,7 @@ pip-update-requirements
 
 Update the packages in a ``requirements.txt`` file.
 
-.. image:: https://github.com/alanhamlett/pip-update-requirements/blob/master/pur.gif
+.. image:: https://raw.githubusercontent.com/alanhamlett/pip-update-requirements/master/pur.gif
     :alt: Purring Cat
 
 
