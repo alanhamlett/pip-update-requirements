@@ -30,7 +30,7 @@ setup(
     zip_safe=False,
     platforms='any',
     entry_points={
-        'console_scripts': ['pur = pur.__init__:main'],
+        'console_scripts': ['pur = pur.__init__:pur'],
     },
     classifiers=(
         'Development Status :: 5 - Production/Stable',
