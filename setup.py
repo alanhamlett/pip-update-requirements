@@ -1,7 +1,7 @@
 from setuptools import setup
 
 about = {}
-with open('flask_login/__about__.py') as f:
+with open('pur/__about__.py') as f:
     exec(f.read(), about)
 
 packages = [
