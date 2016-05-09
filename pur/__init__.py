@@ -24,7 +24,7 @@ from .__about__ import __version__
 
 
 @click.command()
-@click.argument('requirements_file', type=click.Path())
+@click.argument('requirements_file', type=click.Path(), required=False)
 @click.option('--output', type=click.Path(),
               help='Output updated packages to this file; Defaults to ' +
               'writing back to REQUIREMENTS_FILE.')
@@ -32,6 +32,8 @@ from .__about__ import __version__
 def pur(requirements_file, **options):
     """Command line entry point."""
 
+    if not requirements_file:
+        requirements_file = 'requirements.txt'
     if not options.get('output'):
         options['output'] = requirements_file
 
