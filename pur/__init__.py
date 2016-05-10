@@ -24,32 +24,40 @@ from .__about__ import __version__
 
 
 @click.command()
-@click.argument('requirements_file', type=click.Path(), required=False)
-@click.option('--output', type=click.Path(),
+@click.option('-r', '--requirement', type=click.Path(),
+              help='The requirements.txt file to update; Defaults to using ' +
+              'requirements.txt from the current directory if it exist.')
+@click.option('-o', '--output', type=click.Path(),
               help='Output updated packages to this file; Defaults to ' +
-              'writing back to REQUIREMENTS_FILE.')
-@click.option('--nonzero-exit-code', is_flag=True, default=False,
+              'overwriting the input requirements.txt file.')
+@click.option('-z', '--nonzero-exit-code', is_flag=True, default=False,
               help='Exit with status l0 when all packages up-to-date, 11 ' +
               'when some packages were updated. Defaults to exit status zero ' +
               'on success and non-zero on failure.')
+@click.option('-s', '--skip', type=click.STRING, help='Comma separated list of ' +
+              'packages to skip updating.')
 @click.version_option(__version__)
-def pur(requirements_file, **options):
+def pur(**options):
     """Command line entry point."""
 
-    if not requirements_file:
-        requirements_file = 'requirements.txt'
+    if not options.get('requirement'):
+        options['requirement'] = 'requirements.txt'
     if not options.get('output'):
-        options['output'] = requirements_file
+        options['output'] = options['requirement']
+    try:
+        options['skip'] = set(x.strip() for x in options['skip'].split(','))
+    except AttributeError:
+        options['skip'] = set()
 
     # prevent processing nested requirements files
     patch_pip()
 
-    requirements = get_requirements_and_latest(requirements_file)
+    requirements = get_requirements_and_latest(options['requirement'])
 
     buf = StringIO()
     updated = 0
     for line, req, spec_ver, latest_ver in requirements:
-        if req:
+        if req and req.name not in options['skip']:
             if spec_ver < latest_ver:
                 new_line = line.replace(str(spec_ver), str(latest_ver), 1)
                 buf.write(new_line)

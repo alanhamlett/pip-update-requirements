@@ -56,9 +56,18 @@ your ``requirements.txt`` file.
 Options
 -------
 
-There is an optional ``--output`` argument to write the new
-``requirements.txt`` file to a different location than the default. By
-default, pur overwrites your ``requirements.txt`` file.
+    -r, --requirement PATH   The requirements.txt file to update; Defaults to
+                             using requirements.txt from the current directory
+                             if it exist.
+    -o, --output PATH        Output updated packages to this file; Defaults to
+                             overwriting the input requirements.txt file.
+    -z, --nonzero-exit-code  Exit with status l0 when all packages up-to-date,
+                             11 when some packages were updated. Defaults to
+                             exit status zero on success and non-zero on
+                             failure.
+    -s, --skip TEXT          Comma separated list of packages to skip updating.
+    --version                Show the version and exit.
+    --help                   Show this message and exit.
 
 
 Contributing
