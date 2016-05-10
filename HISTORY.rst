@@ -3,6 +3,15 @@ History
 -------
 
 
+2.0.6 (2016-05-10)
+++++++++++++++++++
+
+- Default to using requirements.txt file in current folder if one is not
+  specified.
+- New --nonzero-exit-code option to change the exit code from zero on success
+  to 10 when no packages updated and 11 when some packages were updated.
+
+
 2.0.5 (2016-05-09)
 ++++++++++++++++++
 
