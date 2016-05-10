@@ -45,7 +45,7 @@ def pur(**options):
     if not options.get('output'):
         options['output'] = options['requirement']
     try:
-        options['skip'] = set(x.strip() for x in options['skip'].split(','))
+        options['skip'] = set(x.strip().lower() for x in options['skip'].split(','))
     except AttributeError:
         options['skip'] = set()
 
@@ -57,7 +57,7 @@ def pur(**options):
     buf = StringIO()
     updated = 0
     for line, req, spec_ver, latest_ver in requirements:
-        if req and req.name not in options['skip']:
+        if req and req.name.lower() not in options['skip']:
             if spec_ver < latest_ver:
                 new_line = line.replace(str(spec_ver), str(latest_ver), 1)
                 buf.write(new_line)
@@ -171,7 +171,3 @@ class ExitCodeException(click.ClickException):
         self.exit_code = exit_code
     def show(self):
         pass
-
-
-if __name__ == '__main__':
-    pur()

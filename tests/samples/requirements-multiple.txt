@@ -1,6 +1,6 @@
 flask==0.9
-Alembic==0.10.1
-sqlalchemy==0.10.1
+Alembic==0.9
+sqlalchemy==0.9
 -r another-requirements.txt
 # an empty line below
 

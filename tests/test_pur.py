@@ -142,8 +142,29 @@ class BaseTestCase(utils.TestCase):
     def test_skip_package(self):
         tempdir = tempfile.mkdtemp()
         requirements = os.path.join(tempdir, 'requirements.txt')
-        shutil.copy('tests/samples/requirements.txt', requirements)
+        shutil.copy('tests/samples/requirements-multiple.txt', requirements)
         args = ['-r', requirements, '-s', 'flask']
+
+        with utils.mock.patch('pip.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+            project = 'flask'
+            version = '0.10.1'
+            link = Link('')
+            candidate = InstallationCandidate(project, version, link)
+            mock_find_all_candidates.return_value = [candidate]
+
+            result = self.runner.invoke(pur, args)
+            self.assertIsNone(result.exception)
+            expected_output = "Updated Alembic: 0.9 -> 0.10.1\nUpdated sqlalchemy: 0.9 -> 0.10.1\nAll requirements up-to-date.\n"
+            self.assertEquals(u(result.output), u(expected_output))
+            self.assertEquals(result.exit_code, 0)
+            expected_requirements = open('tests/samples/output/test_skip_package').read()
+            self.assertEquals(open(requirements).read(), expected_requirements)
+
+    def test_skip_multiple_packages(self):
+        tempdir = tempfile.mkdtemp()
+        requirements = os.path.join(tempdir, 'requirements.txt')
+        shutil.copy('tests/samples/requirements-multiple.txt', requirements)
+        args = ['-r', requirements, '-s', 'flask, alembic , SQLAlchemy']
 
         with utils.mock.patch('pip.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
             project = 'flask'
@@ -157,5 +178,5 @@ class BaseTestCase(utils.TestCase):
             expected_output = "All requirements up-to-date.\n"
             self.assertEquals(u(result.output), u(expected_output))
             self.assertEquals(result.exit_code, 0)
-            expected_requirements = open('tests/samples/output/test_skip_package').read()
+            expected_requirements = open('tests/samples/output/test_skip_multiple_packages').read()
             self.assertEquals(open(requirements).read(), expected_requirements)
