@@ -42,7 +42,7 @@ For example, given a ``requirements.txt`` file::
 
 Running pur on that file updates the packages to current latest versions::
 
-    $ pur requirements.txt
+    $ pur -r requirements.txt
     Updated flask: 0.9 -> 0.10.1
     Updated sqlalchemy: 0.9.10 -> 1.0.12
     Updated alembic: 0.8.4 -> 0.8.6
