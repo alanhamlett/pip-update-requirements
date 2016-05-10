@@ -28,6 +28,10 @@ from .__about__ import __version__
 @click.option('--output', type=click.Path(),
               help='Output updated packages to this file; Defaults to ' +
               'writing back to REQUIREMENTS_FILE.')
+@click.option('--nonzero-exit-code', is_flag=True, default=False,
+              help='Exit with status l0 when all packages up-to-date, 11 ' +
+              'when some packages were updated. Defaults to exit status zero ' +
+              'on success and non-zero on failure.')
 @click.version_option(__version__)
 def pur(requirements_file, **options):
     """Command line entry point."""
@@ -43,6 +47,7 @@ def pur(requirements_file, **options):
     requirements = get_requirements_and_latest(requirements_file)
 
     buf = StringIO()
+    updated = 0
     for line, req, spec_ver, latest_ver in requirements:
         if req:
             if spec_ver < latest_ver:
@@ -53,6 +58,7 @@ def pur(requirements_file, **options):
                     old=spec_ver,
                     new=latest_ver,
                 ))
+                updated += 1
             else:
                 buf.write(line)
         else:
@@ -65,7 +71,11 @@ def pur(requirements_file, **options):
     buf.close()
 
     click.echo('All requirements up-to-date.')
-    return 0
+
+    if options.get('nonzero_exit_code'):
+        if updated > 0:
+            raise ExitCodeException(11)
+        raise ExitCodeException(10)
 
 
 def get_requirements_and_latest(filename):
@@ -146,6 +156,13 @@ def patch_pip():
         return []
     req_file.parse_requirements = patched_parse_requirements
     return old_fn
+
+
+class ExitCodeException(click.ClickException):
+    def __init__(self, exit_code):
+        self.exit_code = exit_code
+    def show(self):
+        pass
 
 
 if __name__ == '__main__':

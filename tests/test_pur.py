@@ -75,3 +75,45 @@ class BaseTestCase(utils.TestCase):
             self.assertEquals(u(result.output), u(expected_output))
             self.assertEquals(result.exit_code, 0)
             self.assertEquals(open('tests/samples/requirements.txt').read(), requirements)
+
+    def test_exit_code_from_no_updates(self):
+        tempdir = tempfile.mkdtemp()
+        requirements = os.path.join(tempdir, 'requirements.txt')
+        shutil.copy('tests/samples/requirements-up-to-date.txt', requirements)
+        args = [requirements, '--nonzero-exit-code']
+
+        with utils.mock.patch('pip.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+            project = 'flask'
+            version = '0.10.1'
+            link = Link('')
+            candidate = InstallationCandidate(project, version, link)
+            mock_find_all_candidates.return_value = [candidate]
+
+            result = self.runner.invoke(pur, args)
+            self.assertEqual(result.exception.code, 10)
+            expected_output = "All requirements up-to-date.\n"
+            self.assertEquals(u(result.output), u(expected_output))
+            self.assertEquals(result.exit_code, 10)
+            expected_requirements = open('tests/samples/output/test_updates_package').read()
+            self.assertEquals(open(requirements).read(), expected_requirements)
+
+    def test_exit_code_from_some_updates(self):
+        tempdir = tempfile.mkdtemp()
+        requirements = os.path.join(tempdir, 'requirements.txt')
+        shutil.copy('tests/samples/requirements.txt', requirements)
+        args = [requirements, '--nonzero-exit-code']
+
+        with utils.mock.patch('pip.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+            project = 'flask'
+            version = '0.10.1'
+            link = Link('')
+            candidate = InstallationCandidate(project, version, link)
+            mock_find_all_candidates.return_value = [candidate]
+
+            result = self.runner.invoke(pur, args)
+            self.assertEqual(result.exception.code, 11)
+            expected_output = "Updated flask: 0.9 -> 0.10.1\nAll requirements up-to-date.\n"
+            self.assertEquals(u(result.output), u(expected_output))
+            self.assertEquals(result.exit_code, 11)
+            expected_requirements = open('tests/samples/output/test_updates_package').read()
+            self.assertEquals(open(requirements).read(), expected_requirements)
