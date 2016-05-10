@@ -3,6 +3,14 @@ History
 -------
 
 
+3.0.0 (2016-05-10)
+++++++++++++++++++
+
+- Using -r or --requirement option for input requirements.txt file to be more
+  like pip.
+- New --skip option to prevent packages from being updated.
+
+
 2.0.6 (2016-05-10)
 ++++++++++++++++++
 
