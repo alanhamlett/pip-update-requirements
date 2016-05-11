@@ -53,7 +53,7 @@ class BaseTestCase(utils.TestCase):
             expected_output = "Updated flask: 0.9 -> 0.10.1\nAll requirements up-to-date.\n"
             self.assertEquals(u(result.output), u(expected_output))
             self.assertEquals(result.exit_code, 0)
-            expected_requirements = open('tests/samples/output/test_updates_package').read()
+            expected_requirements = open('tests/samples/results/test_updates_package').read()
             self.assertEquals(open(requirements).read(), expected_requirements)
 
     def test_requirements_long_option_accepted(self):
@@ -74,7 +74,7 @@ class BaseTestCase(utils.TestCase):
             expected_output = "Updated flask: 0.9 -> 0.10.1\nAll requirements up-to-date.\n"
             self.assertEquals(u(result.output), u(expected_output))
             self.assertEquals(result.exit_code, 0)
-            expected_requirements = open('tests/samples/output/test_updates_package').read()
+            expected_requirements = open('tests/samples/results/test_updates_package').read()
             self.assertEquals(open(requirements).read(), expected_requirements)
 
     def test_updates_package_to_output_file(self):
@@ -115,7 +115,7 @@ class BaseTestCase(utils.TestCase):
             expected_output = "All requirements up-to-date.\n"
             self.assertEquals(u(result.output), u(expected_output))
             self.assertEquals(result.exit_code, 10)
-            expected_requirements = open('tests/samples/output/test_updates_package').read()
+            expected_requirements = open('tests/samples/results/test_updates_package').read()
             self.assertEquals(open(requirements).read(), expected_requirements)
 
     def test_exit_code_from_some_updates(self):
@@ -136,7 +136,7 @@ class BaseTestCase(utils.TestCase):
             expected_output = "Updated flask: 0.9 -> 0.10.1\nAll requirements up-to-date.\n"
             self.assertEquals(u(result.output), u(expected_output))
             self.assertEquals(result.exit_code, 11)
-            expected_requirements = open('tests/samples/output/test_updates_package').read()
+            expected_requirements = open('tests/samples/results/test_updates_package').read()
             self.assertEquals(open(requirements).read(), expected_requirements)
 
     def test_skip_package(self):
@@ -157,7 +157,7 @@ class BaseTestCase(utils.TestCase):
             expected_output = "Updated Alembic: 0.9 -> 0.10.1\nUpdated sqlalchemy: 0.9 -> 0.10.1\nAll requirements up-to-date.\n"
             self.assertEquals(u(result.output), u(expected_output))
             self.assertEquals(result.exit_code, 0)
-            expected_requirements = open('tests/samples/output/test_skip_package').read()
+            expected_requirements = open('tests/samples/results/test_skip_package').read()
             self.assertEquals(open(requirements).read(), expected_requirements)
 
     def test_skip_multiple_packages(self):
@@ -178,5 +178,85 @@ class BaseTestCase(utils.TestCase):
             expected_output = "All requirements up-to-date.\n"
             self.assertEquals(u(result.output), u(expected_output))
             self.assertEquals(result.exit_code, 0)
-            expected_requirements = open('tests/samples/output/test_skip_multiple_packages').read()
+            expected_requirements = open('tests/samples/results/test_skip_multiple_packages').read()
             self.assertEquals(open(requirements).read(), expected_requirements)
+
+    def test_updates_package_with_no_version_specified(self):
+        tempdir = tempfile.mkdtemp()
+        requirements = os.path.join(tempdir, 'requirements.txt')
+        shutil.copy('tests/samples/requirements.txt', requirements)
+        args = ['-r', requirements, '-f']
+
+        with utils.mock.patch('pip.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+            project = 'flask'
+            version = '0.10.1'
+            link = Link('')
+            candidate = InstallationCandidate(project, version, link)
+            mock_find_all_candidates.return_value = [candidate]
+
+            result = self.runner.invoke(pur, args)
+            self.assertIsNone(result.exception)
+            expected_output = "Updated flask: 0.9 -> 0.10.1\nUpdated flask: Unknown -> 0.10.1\nAll requirements up-to-date.\n"
+            self.assertEquals(u(result.output), u(expected_output))
+            self.assertEquals(result.exit_code, 0)
+            expected_requirements = open('tests/samples/results/test_updates_package_with_no_version_specified').read()
+            self.assertEquals(open(requirements).read(), expected_requirements)
+
+    def test_invalid_package(self):
+        tempdir = tempfile.mkdtemp()
+        requirements = os.path.join(tempdir, 'requirements.txt')
+        shutil.copy('tests/samples/requirements-invalid.txt', requirements)
+        args = ['-r', requirements]
+
+        with utils.mock.patch('pip.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+            mock_find_all_candidates.return_value = []
+
+            result = self.runner.invoke(pur, args)
+            self.assertIsNone(result.exception)
+            expected_output = "All requirements up-to-date.\n"
+            self.assertEquals(u(result.output), u(expected_output))
+            self.assertEquals(result.exit_code, 0)
+            expected_requirements = "invalidpackage==0.9\n"
+            self.assertEquals(open(requirements).read(), expected_requirements)
+
+    def test_no_arguments(self):
+        tempdir = tempfile.mkdtemp()
+        requirements = os.path.join(tempdir, 'requirements.txt')
+        shutil.copy('tests/samples/requirements.txt', requirements)
+        args = []
+
+        with utils.mock.patch('pip.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+            project = 'flask'
+            version = '0.10.1'
+            link = Link('')
+            candidate = InstallationCandidate(project, version, link)
+            mock_find_all_candidates.return_value = [candidate]
+
+            with self.cd(tempdir):
+                result = self.runner.invoke(pur, args)
+
+            self.assertIsNone(result.exception)
+            expected_output = "Updated flask: 0.9 -> 0.10.1\nAll requirements up-to-date.\n"
+            self.assertEquals(u(result.output), u(expected_output))
+            self.assertEquals(result.exit_code, 0)
+            expected_requirements = open('tests/samples/results/test_updates_package').read()
+            self.assertEquals(open(requirements).read(), expected_requirements)
+
+    def test_no_arguments_and_no_requirements_file(self):
+        tempdir = tempfile.mkdtemp()
+        args = []
+
+        with utils.mock.patch('pip.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+            project = 'flask'
+            version = '0.10.1'
+            link = Link('')
+            candidate = InstallationCandidate(project, version, link)
+            mock_find_all_candidates.return_value = [candidate]
+
+            with self.cd(tempdir):
+                result = self.runner.invoke(pur, args)
+
+            self.assertEqual(result.exception.code, 1)
+            expected_output = "Error: Could not open requirements file: [Errno 2] No such file or directory: 'requirements.txt'\n"
+            self.assertEquals(u(result.output), u(expected_output))
+            self.assertEquals(result.exit_code, 1)

@@ -61,6 +61,9 @@ Options
                          if it exist.
 -o, --output PATH        Output updated packages to this file; Defaults to
                          overwriting the input requirements.txt file.
+-f, --force              Force updating packages even when a package has no
+                         version specified in the input requirements.txt
+                         file.
 -z, --nonzero-exit-code  Exit with status l0 when all packages up-to-date,
                          11 when some packages were updated. Defaults to
                          exit status zero on success and non-zero on

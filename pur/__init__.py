@@ -15,6 +15,7 @@ except ImportError:  # pragma: nocover
     from io import StringIO
 
 from pip.download import PipSession, get_file_content
+from pip.exceptions import InstallationError
 from pip.index import PackageFinder
 from pip.models.index import PyPI
 from pip.req import req_file
@@ -30,6 +31,9 @@ from .__about__ import __version__
 @click.option('-o', '--output', type=click.Path(),
               help='Output updated packages to this file; Defaults to ' +
               'overwriting the input requirements.txt file.')
+@click.option('-f', '--force', is_flag=True, default=False,
+              help='Force updating packages even when a package has no ' +
+              'version specified in the input requirements.txt file.')
 @click.option('-z', '--nonzero-exit-code', is_flag=True, default=False,
               help='Exit with status l0 when all packages up-to-date, 11 ' +
               'when some packages were updated. Defaults to exit status zero ' +
@@ -40,9 +44,9 @@ from .__about__ import __version__
 def pur(**options):
     """Command line entry point."""
 
-    if not options.get('requirement'):
+    if not options['requirement']:
         options['requirement'] = 'requirements.txt'
-    if not options.get('output'):
+    if not options['output']:
         options['output'] = options['requirement']
     try:
         options['skip'] = set(x.strip().lower() for x in options['skip'].split(','))
@@ -52,26 +56,34 @@ def pur(**options):
     # prevent processing nested requirements files
     patch_pip()
 
-    requirements = get_requirements_and_latest(options['requirement'])
+    try:
+        requirements = get_requirements_and_latest(options['requirement'],
+                                                   force=options['force'])
 
-    buf = StringIO()
-    updated = 0
-    for line, req, spec_ver, latest_ver in requirements:
-        if req and req.name.lower() not in options['skip']:
-            if spec_ver < latest_ver:
-                new_line = line.replace(str(spec_ver), str(latest_ver), 1)
-                buf.write(new_line)
-                click.echo('Updated {package}: {old} -> {new}'.format(
-                    package=req.name,
-                    old=spec_ver,
-                    new=latest_ver,
-                ))
-                updated += 1
+        buf = StringIO()
+        updated = 0
+        for line, req, spec_ver, latest_ver in requirements:
+            if req and req.name.lower() not in options['skip']:
+                if spec_ver and (spec_ver == 'Unknown' or spec_ver < latest_ver):
+                    if spec_ver == 'Unknown':
+                        new_line = '{0}=={1}'.format(line, latest_ver)
+                    else:
+                        new_line = line.replace(str(spec_ver), str(latest_ver), 1)
+                    buf.write(new_line)
+                    click.echo('Updated {package}: {old} -> {new}'.format(
+                        package=req.name,
+                        old=spec_ver,
+                        new=latest_ver,
+                    ))
+                    updated += 1
+                else:
+                    buf.write(line)
             else:
                 buf.write(line)
-        else:
-            buf.write(line)
-        buf.write("\n")
+            buf.write("\n")
+
+    except InstallationError, e:
+        raise click.ClickException(str(e))
 
     with open(options['output'], 'w') as output:
         output.write(buf.getvalue())
@@ -80,19 +92,21 @@ def pur(**options):
 
     click.echo('All requirements up-to-date.')
 
-    if options.get('nonzero_exit_code'):
+    if options['nonzero_exit_code']:
         if updated > 0:
             raise ExitCodeException(11)
         raise ExitCodeException(10)
 
 
-def get_requirements_and_latest(filename):
+def get_requirements_and_latest(filename, force=False):
     """Parse a requirements file and get latest version for each requirement.
 
     Yields a tuple of (original line, InstallRequirement instance,
     spec_version, latest_version).
 
     :param filename:  Path to a requirements.txt file.
+    :param force:     Force getting latest version even for packages without
+                      a version specified.
     """
     session = PipSession()
 
@@ -100,26 +114,52 @@ def get_requirements_and_latest(filename):
     for orig_line, line_number, line in yield_lines(content):
         line = req_file.COMMENT_RE.sub('', line)
         line = line.strip()
-        if line:
-            reqs = list(req_file.process_line(line, filename,
-                                              line_number, session=session))
-            if len(reqs) > 0:
-                req = reqs[0]
-                spec_ver = None
-                try:
-                    if req and req.req:
-                        spec_ver = Version(req.req.specs[0][1])
-                except IndexError:
-                    pass
-                if spec_ver:
-                    latest_ver = latest_version(req, session)
-                    yield (orig_line, req, spec_ver, latest_ver)
-                else:
-                    yield (orig_line, None, None, None)
-            else:
-                yield (orig_line, None, None, None)
+        req = parse_requirement(line, filename, line_number, session)
+        spec_ver = current_version(req, force=force)
+        if spec_ver:
+            latest_ver = latest_version(req, session)
+            yield (orig_line, req, spec_ver, latest_ver)
         else:
             yield (orig_line, None, None, None)
+
+
+def parse_requirement(line, filename, line_number, session):
+    """Parse a requirement line and return an InstallRequirement instance.
+
+    :param line:         One line from a requirements.txt file.
+    :param filename:     Path to a requirements.txt file.
+    :param line_number:  The integer line number of the current line.
+    :param session:      Instance of pip.download.PipSession.
+    """
+
+    if not line:
+        return None
+
+    reqs = list(req_file.process_line(line, filename,
+                                      line_number, session=session))
+    return reqs[0] if len(reqs) > 0 else None
+
+
+def current_version(req, force=False):
+    """Get the current version from an InstallRequirement instance.
+
+    :param req:    Instance of pip.req.req_install.InstallRequirement.
+    :param force:  Force getting latest version even for packages without
+    """
+
+    if not req or not req.req:
+        return None
+
+    ver = None
+    try:
+        ver = Version(req.req.specs[0][1])
+    except IndexError:
+        pass
+
+    if not ver and force and req.link is None:
+        ver = 'Unknown'
+
+    return ver
 
 
 def yield_lines(content):

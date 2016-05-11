@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 
+import os
 import logging
 import sys
+from contextlib import contextmanager
 
 try:
     import mock
@@ -68,6 +70,15 @@ class TestCase(unittest.TestCase):
 
     def assertListsEqual(self, first_list, second_list):
         self.assertEquals(self.normalize_list(first_list), self.normalize_list(second_list))
+
+    @contextmanager
+    def cd(self, newdir):
+        prevdir = os.getcwd()
+        os.chdir(os.path.expanduser(newdir))
+        try:
+            yield
+        finally:
+            os.chdir(prevdir)
 
     @property
     def isPy35(self):
