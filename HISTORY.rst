@@ -3,6 +3,14 @@ History
 -------
 
 
+3.0.2 (2016-05-11)
+++++++++++++++++++
+
+- New --force option to update packages even when a package has no version
+  specified in the input requirements.txt file.
+- Bundle pip to prevent overwriting system pip.
+
+
 3.0.1 (2016-05-10)
 ++++++++++++++++++
 
