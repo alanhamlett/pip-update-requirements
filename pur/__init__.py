@@ -9,12 +9,29 @@
 
 
 import click
+import os
+import sys
 try:
     from StringIO import StringIO
 except ImportError:  # pragma: nocover
     from io import StringIO
 
-from pip.download import PipSession, get_file_content
+# add local packages folder to sys.path
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                'packages'))
+try:
+    from pip.download import PipSession
+except (TypeError, ImportError):
+    # on Windows, non-ASCII characters in import path can be fixed using
+    # the script path from sys.argv[0].
+    # More info at https://github.com/wakatime/wakatime/issues/32
+    sys.path.insert(0,
+                    os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])),
+                                 'packages'))
+    from pip.download import PipSession
+
+
+from pip.download import get_file_content
 from pip.exceptions import InstallationError
 from pip.index import PackageFinder
 from pip.models.index import PyPI
@@ -82,7 +99,7 @@ def pur(**options):
                 buf.write(line)
             buf.write("\n")
 
-    except InstallationError, e:
+    except InstallationError as e:
         raise click.ClickException(str(e))
 
     with open(options['output'], 'w') as output:
