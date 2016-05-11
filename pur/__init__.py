@@ -81,7 +81,8 @@ def pur(**options):
         updated = 0
         for line, req, spec_ver, latest_ver in requirements:
             if req and req.name.lower() not in options['skip']:
-                if spec_ver and (spec_ver == 'Unknown' or spec_ver < latest_ver):
+                if spec_ver and latest_ver and (spec_ver == 'Unknown'
+                                                or spec_ver < latest_ver):
                     if spec_ver == 'Unknown':
                         new_line = '{0}=={1}'.format(line, latest_ver)
                     else:
