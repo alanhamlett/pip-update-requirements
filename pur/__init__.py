@@ -305,6 +305,9 @@ def should_update(req, spec_ver, latest_ver, force=False):
                         a version specified.
     """
 
+    if latest_ver is None:
+        return False
+
     found = spec_ver[0]
     eq_ver = spec_ver[1]
     lt_ver = spec_ver[4]

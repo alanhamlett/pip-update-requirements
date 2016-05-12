@@ -204,21 +204,21 @@ class BaseTestCase(utils.TestCase):
             self.assertEquals(open(requirements).read(), expected_requirements)
 
     def test_invalid_package(self):
+        requirements = 'tests/samples/requirements.txt'
         tempdir = tempfile.mkdtemp()
-        requirements = os.path.join(tempdir, 'requirements.txt')
-        shutil.copy('tests/samples/requirements-invalid.txt', requirements)
-        args = ['-r', requirements]
+        tmpfile = os.path.join(tempdir, 'requirements.txt')
+        shutil.copy(requirements, tmpfile)
+        args = ['-r', tmpfile]
 
         with utils.mock.patch('pip.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
             mock_find_all_candidates.return_value = []
 
             result = self.runner.invoke(pur, args)
-            self.assertIsNone(result.exception)
             expected_output = "All requirements up-to-date.\n"
             self.assertEquals(u(result.output), u(expected_output))
+            self.assertIsNone(result.exception)
             self.assertEquals(result.exit_code, 0)
-            expected_requirements = "invalidpackage==0.9\n"
-            self.assertEquals(open(requirements).read(), expected_requirements)
+            self.assertEquals(open(tmpfile).read(), open(requirements).read())
 
     def test_no_arguments(self):
         tempdir = tempfile.mkdtemp()
