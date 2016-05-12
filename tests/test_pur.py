@@ -161,10 +161,11 @@ class BaseTestCase(utils.TestCase):
             self.assertEquals(open(requirements).read(), expected_requirements)
 
     def test_skip_multiple_packages(self):
+        requirements = 'tests/samples/requirements-multiple.txt'
         tempdir = tempfile.mkdtemp()
-        requirements = os.path.join(tempdir, 'requirements.txt')
-        shutil.copy('tests/samples/requirements-multiple.txt', requirements)
-        args = ['-r', requirements, '-s', 'flask, alembic , SQLAlchemy']
+        tmpfile = os.path.join(tempdir, 'requirements.txt')
+        shutil.copy(requirements, tmpfile)
+        args = ['-r', tmpfile, '-s', 'flask, alembic , SQLAlchemy']
 
         with utils.mock.patch('pip.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
             project = 'flask'
@@ -178,8 +179,8 @@ class BaseTestCase(utils.TestCase):
             expected_output = "All requirements up-to-date.\n"
             self.assertEquals(u(result.output), u(expected_output))
             self.assertEquals(result.exit_code, 0)
-            expected_requirements = open('tests/samples/results/test_skip_multiple_packages').read()
-            self.assertEquals(open(requirements).read(), expected_requirements)
+            expected_requirements = open(requirements).read()
+            self.assertEquals(open(tmpfile).read(), expected_requirements)
 
     def test_updates_package_with_no_version_specified(self):
         tempdir = tempfile.mkdtemp()
@@ -260,3 +261,88 @@ class BaseTestCase(utils.TestCase):
             expected_output = "Error: Could not open requirements file: [Errno 2] No such file or directory: 'requirements.txt'\n"
             self.assertEquals(u(result.output), u(expected_output))
             self.assertEquals(result.exit_code, 1)
+
+    def test_updates_package_with_number_in_name(self):
+        tempdir = tempfile.mkdtemp()
+        requirements = os.path.join(tempdir, 'requirements.txt')
+        shutil.copy('tests/samples/requirements-version-in-name.txt', requirements)
+        args = ['-r', requirements]
+
+        with utils.mock.patch('pip.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+            project = 'package1'
+            version = '2.0'
+            link = Link('')
+            candidate = InstallationCandidate(project, version, link)
+            mock_find_all_candidates.return_value = [candidate]
+
+            result = self.runner.invoke(pur, args)
+            self.assertIsNone(result.exception)
+            expected_output = "Updated package1: 1 -> 2.0\nAll requirements up-to-date.\n"
+            self.assertEquals(u(result.output), u(expected_output))
+            self.assertEquals(result.exit_code, 0)
+            expected_requirements = open('tests/samples/results/test_updates_package_with_version_in_name').read()
+            self.assertEquals(open(requirements).read(), expected_requirements)
+
+    def test_updates_package_with_extras(self):
+        tempdir = tempfile.mkdtemp()
+        requirements = os.path.join(tempdir, 'requirements.txt')
+        shutil.copy('tests/samples/requirements-with-extras.txt', requirements)
+        args = ['-r', requirements]
+
+        with utils.mock.patch('pip.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+            project = 'firstpackage'
+            version = '2.0'
+            link = Link('')
+            candidate = InstallationCandidate(project, version, link)
+            mock_find_all_candidates.return_value = [candidate]
+
+            result = self.runner.invoke(pur, args)
+            expected_output = "Updated firstpackage1: 1 -> 2.0\nAll requirements up-to-date.\n"
+            self.assertEquals(u(result.output), u(expected_output))
+            self.assertIsNone(result.exception)
+            self.assertEquals(result.exit_code, 0)
+            expected_requirements = open('tests/samples/results/test_updates_package_with_extras').read()
+            self.assertEquals(open(requirements).read(), expected_requirements)
+
+    def test_updates_package_with_max_version_spec(self):
+        tempdir = tempfile.mkdtemp()
+        requirements = os.path.join(tempdir, 'requirements.txt')
+        shutil.copy('tests/samples/requirements-with-max-version-spec.txt', requirements)
+        args = ['-r', requirements]
+
+        with utils.mock.patch('pip.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+            project = 'afakepackage'
+            version = '0.10.1'
+            link = Link('')
+            candidate = InstallationCandidate(project, version, link)
+            mock_find_all_candidates.return_value = [candidate]
+
+            result = self.runner.invoke(pur, args)
+            expected_output = "Updated afakepackage: 0.9 -> 0.10.1\nUpdated afakepackage: 0.9 -> 0.10.1\nAll requirements up-to-date.\n"
+            self.assertEquals(u(result.output), u(expected_output))
+            self.assertIsNone(result.exception)
+            self.assertEquals(result.exit_code, 0)
+            expected_requirements = open('tests/samples/results/test_updates_package_with_max_version_spec').read()
+            self.assertEquals(open(requirements).read(), expected_requirements)
+
+    def test_max_version_spec_prevents_updating_package(self):
+        requirements = 'tests/samples/requirements-with-max-version-spec.txt'
+        tempdir = tempfile.mkdtemp()
+        tmpfile = os.path.join(tempdir, 'requirements.txt')
+        shutil.copy(requirements, tmpfile)
+        args = ['-r', tmpfile]
+
+        with utils.mock.patch('pip.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+            project = 'afakepackage'
+            version = '2.0'
+            link = Link('')
+            candidate = InstallationCandidate(project, version, link)
+            mock_find_all_candidates.return_value = [candidate]
+
+            result = self.runner.invoke(pur, args)
+            self.assertIsNone(result.exception)
+            expected_output = "All requirements up-to-date.\n"
+            self.assertEquals(u(result.output), u(expected_output))
+            self.assertEquals(result.exit_code, 0)
+            expected_requirements = open(tmpfile).read()
+            self.assertEquals(open(tmpfile).read(), expected_requirements)
