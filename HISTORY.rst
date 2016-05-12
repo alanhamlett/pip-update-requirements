@@ -3,6 +3,13 @@ History
 -------
 
 
+3.0.4 (2016-05-12)
+++++++++++++++++++
+
+- Better handling of requirement version spec to prevent updating packages
+  pinned below and excluding certain versions.
+
+
 3.0.3 (2016-05-12)
 ++++++++++++++++++
 
