@@ -190,26 +190,23 @@ def current_version(req):
     lte_ver = None
     not_ver = None
     for spec in req.req.specs:
-        try:
-            ver = Version(spec[1])
-            if spec[0] == '==':
-                eq_ver = ver
-            elif spec[0] == '>':
-                if not gt_ver or ver > gt_ver:
-                    gt_ver = ver
-            elif spec[0] == '>=':
-                if not gte_ver or ver > gte_ver:
-                    gte_ver = ver
-            elif spec[0] == '<':
-                if not lt_ver or ver < lt_ver:
-                    lt_ver = ver
-            elif spec[0] == '<=':
-                if not lte_ver or ver < lte_ver:
-                    lte_ver = ver
-            elif spec[0] == '!=':
-                not_ver = ver
-        except IndexError:
-            pass
+        ver = Version(spec[1])
+        if spec[0] == '==':
+            eq_ver = ver
+        elif spec[0] == '>':
+            if not gt_ver or ver > gt_ver:
+                gt_ver = ver
+        elif spec[0] == '>=':
+            if not gte_ver or ver > gte_ver:
+                gte_ver = ver
+        elif spec[0] == '<':
+            if not lt_ver or ver < lt_ver:
+                lt_ver = ver
+        elif spec[0] == '<=':
+            if not lte_ver or ver < lte_ver:
+                lte_ver = ver
+        elif spec[0] == '!=':
+            not_ver = ver
 
     found = (eq_ver is not None or gt_ver is not None or gte_ver is not None or
              lt_ver is not None or lte_ver is not None or not_ver is not None)
