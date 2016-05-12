@@ -1,3 +1,2 @@
 include README.rst LICENSE NOTICE HISTORY.rst requirements.txt
-recursive-include pur *.py
-recursive-include pur *.pem
+recursive-include pur *.py *.pem
