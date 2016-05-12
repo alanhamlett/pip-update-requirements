@@ -3,6 +3,13 @@ History
 -------
 
 
+3.0.3 (2016-05-12)
+++++++++++++++++++
+
+- Fix bug where SSL cert verification failed because requests cert file not
+  included in distribution.
+
+
 3.0.2 (2016-05-11)
 ++++++++++++++++++
 
