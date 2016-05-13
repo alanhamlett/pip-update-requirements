@@ -434,3 +434,24 @@ class BaseTestCase(utils.TestCase):
             self.assertEquals(result.exit_code, 0)
             expected_requirements = open('tests/samples/results/test_updates_package_with_min_version_spec').read()
             self.assertEquals(open(tmpfile).read(), expected_requirements)
+
+    def test_dry_run(self):
+        requirements = 'tests/samples/requirements.txt'
+        tempdir = tempfile.mkdtemp()
+        tmpfile = os.path.join(tempdir, 'requirements.txt')
+        shutil.copy(requirements, tmpfile)
+        args = ['-r', tmpfile, '-d']
+
+        with utils.mock.patch('pip.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+            project = 'flask'
+            version = '0.10.1'
+            link = Link('')
+            candidate = InstallationCandidate(project, version, link)
+            mock_find_all_candidates.return_value = [candidate]
+
+            result = self.runner.invoke(pur, args)
+            self.assertIsNone(result.exception)
+            expected_output = open('tests/samples/results/test_updates_package').read() + "\n"
+            self.assertEquals(u(result.output), u(expected_output))
+            self.assertEquals(result.exit_code, 0)
+            self.assertEquals(open(tmpfile).read(), open(requirements).read())

@@ -52,12 +52,15 @@ from .__about__ import __version__
 @click.option('-f', '--force', is_flag=True, default=False,
               help='Force updating packages even when a package has no ' +
               'version specified in the input requirements.txt file.')
+@click.option('-d', '--dry-run', is_flag=True, default=False,
+              help='Output changes to STDOUT instead of overwriting the ' +
+              'requirements.txt file.')
+@click.option('-s', '--skip', type=click.STRING, help='Comma separated list of ' +
+              'packages to skip updating.')
 @click.option('-z', '--nonzero-exit-code', is_flag=True, default=False,
               help='Exit with status l0 when all packages up-to-date, 11 ' +
               'when some packages were updated. Defaults to exit status zero ' +
               'on success and non-zero on failure.')
-@click.option('-s', '--skip', type=click.STRING, help='Comma separated list of ' +
-              'packages to skip updating.')
 @click.version_option(__version__)
 def pur(**options):
     """Command line entry point."""
@@ -92,21 +95,21 @@ def pur(**options):
                     buf.write(new_line)
 
                     if new_line != line:
-                        click.echo('Updated {package}: {old} -> {new}'.format(
+                        echo('Updated {package}: {old} -> {new}'.format(
                             package=req.name,
                             old=old_version(spec_ver),
                             new=latest_ver,
-                        ))
+                        ), options)
                         updated += 1
                     else:
                         msg = ('New version for {package} found ({new}), but ' +
                               'current spec prohibits updating: ' +
                               '{line}')
-                        click.echo(msg.format(
+                        echo(msg.format(
                             package=req.name,
                             new=latest_ver,
                             line=line,
-                        ))
+                        ), options)
                 else:
                     buf.write(line)
             else:
@@ -116,12 +119,15 @@ def pur(**options):
     except InstallationError as e:
         raise click.ClickException(str(e))
 
-    with open(options['output'], 'w') as output:
-        output.write(buf.getvalue())
+    if not options['dry_run']:
+        with open(options['output'], 'w') as output:
+            output.write(buf.getvalue())
+    else:
+        click.echo(buf.getvalue())
 
     buf.close()
 
-    click.echo('All requirements up-to-date.')
+    echo('All requirements up-to-date.', options)
 
     if options['nonzero_exit_code']:
         if updated > 0:
@@ -388,6 +394,11 @@ def update_requirement(req, line, spec_ver, latest_ver):
         spec_part=spec_part.replace(old, new, 1),
     )
     return new_line
+
+
+def echo(msg, options):
+    if not options['dry_run']:
+        click.echo(msg)
 
 
 class ExitCodeException(click.ClickException):
