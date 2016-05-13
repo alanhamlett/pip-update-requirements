@@ -90,12 +90,23 @@ def pur(**options):
                         new_line = update_requirement(req, line, spec_ver,
                                                       latest_ver)
                     buf.write(new_line)
-                    click.echo('Updated {package}: {old} -> {new}'.format(
-                        package=req.name,
-                        old=spec_ver[1] if spec_ver[0] else 'Unknown',
-                        new=latest_ver,
-                    ))
-                    updated += 1
+
+                    if new_line != line:
+                        click.echo('Updated {package}: {old} -> {new}'.format(
+                            package=req.name,
+                            old=old_version(spec_ver),
+                            new=latest_ver,
+                        ))
+                        updated += 1
+                    else:
+                        msg = ('New version for {package} found ({new}), but ' +
+                              'current spec prohibits updating: ' +
+                              '{line}')
+                        click.echo(msg.format(
+                            package=req.name,
+                            new=latest_ver,
+                            line=line,
+                        ))
                 else:
                     buf.write(line)
             else:
@@ -212,6 +223,24 @@ def current_version(req):
              lt_ver is not None or lte_ver is not None or not_ver is not None)
 
     return found, eq_ver, gt_ver, gte_ver, lt_ver, lte_ver, not_ver
+
+
+def old_version(spec_ver):
+    """Get the old version that was updated.
+
+    :param spec_ver:  A tuple from current_version.
+    """
+
+    eq_ver = spec_ver[1]
+    gte_ver = spec_ver[3]
+
+    if eq_ver is not None:
+        return eq_ver
+
+    if gte_ver is not None:
+        return gte_ver
+
+    return 'Unknown'
 
 
 def yield_lines(content):
@@ -345,10 +374,14 @@ def update_requirement(req, line, spec_ver, latest_ver):
     package_part = line[:start_of_spec]
     spec_part = line[start_of_spec:]
 
-    pattern = r'(==\s*){0}'.format(re.sub(r'(\W)', r'\\\1', str(spec_ver[1])))
+    old_ver = spec_ver[1] or spec_ver[3]
+    spec_regex = re.sub(r'(\W)', r'\\\1', str(old_ver))
+    pattern = r'((==|>=)\s*){0}'.format(spec_regex)
     match = re.search(pattern, spec_part)
+    if match is None:
+        return line
     pre_part = match.group(1)
-    old = '{0}{1}'.format(pre_part, str(spec_ver[1]))
+    old = '{0}{1}'.format(pre_part, str(old_ver))
     new = '{0}{1}'.format(pre_part, str(latest_ver))
     new_line = '{package_part}{spec_part}'.format(
         package_part=package_part,

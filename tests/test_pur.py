@@ -412,3 +412,25 @@ class BaseTestCase(utils.TestCase):
             self.assertEquals(result.exit_code, 0)
             expected_requirements = open(requirements).read()
             self.assertEquals(open(tmpfile).read(), expected_requirements)
+
+    def test_updates_package_with_min_version_spec(self):
+        requirements = 'tests/samples/requirements-with-min-version-spec.txt'
+        tempdir = tempfile.mkdtemp()
+        tmpfile = os.path.join(tempdir, 'requirements.txt')
+        shutil.copy(requirements, tmpfile)
+        args = ['-r', tmpfile]
+
+        with utils.mock.patch('pip.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+            project = 'django'
+            version = '1.8.13'
+            link = Link('')
+            candidate = InstallationCandidate(project, version, link)
+            mock_find_all_candidates.return_value = [candidate]
+
+            result = self.runner.invoke(pur, args)
+            expected_output = "Updated django: 1.8.6 -> 1.8.13\nNew version for django found (1.8.13), but current spec prohibits updating: django > 1.8.6, < 1.9\nAll requirements up-to-date.\n"
+            self.assertEquals(u(result.output), u(expected_output))
+            self.assertIsNone(result.exception)
+            self.assertEquals(result.exit_code, 0)
+            expected_requirements = open('tests/samples/results/test_updates_package_with_min_version_spec').read()
+            self.assertEquals(open(tmpfile).read(), expected_requirements)
