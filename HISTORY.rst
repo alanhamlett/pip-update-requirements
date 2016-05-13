@@ -3,6 +3,14 @@ History
 -------
 
 
+3.0.5 (2016-05-13)
+++++++++++++++++++
+
+- Update more than just double equals specs.
+- New --dry-run option to output new requirements.txt to STDOUT instead of
+  overwriting requirements.txt file.
+
+
 3.0.4 (2016-05-12)
 ++++++++++++++++++
 
