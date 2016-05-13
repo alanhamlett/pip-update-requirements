@@ -64,11 +64,13 @@ Options
 -f, --force              Force updating packages even when a package has no
                          version specified in the input requirements.txt
                          file.
--z, --nonzero-exit-code  Exit with status 10 when all packages up-to-date,
+-d, --dry-run            Output changes to STDOUT instead of overwriting the
+                         requirements.txt file.
+-s, --skip TEXT          Comma separated list of packages to skip updating.
+-z, --nonzero-exit-code  Exit with status l0 when all packages up-to-date,
                          11 when some packages were updated. Defaults to
                          exit status zero on success and non-zero on
                          failure.
--s, --skip TEXT          Comma separated list of packages to skip updating.
 --version                Show the version and exit.
 --help                   Show this message and exit.
 
