@@ -471,24 +471,24 @@ class BaseTestCase(utils.TestCase):
                 super(PackageFinderSpy, self).__init__(*args, **kwargs)
                 PackageFinderSpy._spy = self
 
-        with utils.mock.patch('pur.PackageFinder', wraps=PackageFinderSpy) as mock_finder, \
-                 utils.mock.patch('pip.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+        with utils.mock.patch('pur.PackageFinder', wraps=PackageFinderSpy) as mock_finder:
+            with utils.mock.patch('pip.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
 
-            project = 'flask'
-            version = '12.1'
-            link = Link('')
-            candidate = InstallationCandidate(project, version, link)
-            mock_find_all_candidates.return_value = [candidate]
+                project = 'flask'
+                version = '12.1'
+                link = Link('')
+                candidate = InstallationCandidate(project, version, link)
+                mock_find_all_candidates.return_value = [candidate]
 
-            self.runner.invoke(pur, args)
+                self.runner.invoke(pur, args)
 
-            self.assertTrue(mock_finder.called)
+                self.assertTrue(mock_finder.called)
 
-            self.assertEqual(
-                PackageFinderSpy._spy.index_urls,
-                ['http://pypi.example.com', 'https://pypi.example2.com']
-            )
-            self.assertEqual(
-                PackageFinderSpy._spy.secure_origins,
-                [('*', 'pypi.example.com', '*')]
-            )
+                self.assertEqual(
+                    PackageFinderSpy._spy.index_urls,
+                    ['http://pypi.example.com', 'https://pypi.example2.com']
+                )
+                self.assertEqual(
+                    PackageFinderSpy._spy.secure_origins,
+                    [('*', 'pypi.example.com', '*')]
+                )
