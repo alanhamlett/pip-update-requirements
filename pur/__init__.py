@@ -171,8 +171,6 @@ def get_requirements_and_latest(filename, force=False):
         if spec_ver or force:
             latest_ver = latest_version(req, session, finder)
             yield (orig_line, req, spec_ver, latest_ver)
-        else:
-            yield (orig_line, None, None, None)
 
 
 def parse_requirement(line, filename, line_number, session, finder):
@@ -202,9 +200,6 @@ def current_version(req):
 
     :param req:    Instance of pip.req.req_install.InstallRequirement.
     """
-
-    if not req or not req.req:
-        return None
 
     eq_ver = None
     gt_ver = None
