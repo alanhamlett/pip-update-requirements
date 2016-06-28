@@ -5,7 +5,7 @@ import os
 import shutil
 import tempfile
 from click.testing import CliRunner
-from pip.index import InstallationCandidate, Link
+from pip.index import InstallationCandidate, Link, PackageFinder
 
 from pur import pur, __version__
 
@@ -455,3 +455,40 @@ class BaseTestCase(utils.TestCase):
             self.assertEquals(u(result.output), u(expected_output))
             self.assertEquals(result.exit_code, 0)
             self.assertEquals(open(tmpfile).read(), open(requirements).read())
+
+    def test_updates_from_alt_index_url(self):
+        requirements = 'tests/samples/requirements-with-alt-index-url.txt'
+        tempdir = tempfile.mkdtemp()
+        tmpfile = os.path.join(tempdir, 'requirements.txt')
+        shutil.copy(requirements, tmpfile)
+        args = ['-r', tmpfile]
+
+        class PackageFinderSpy(PackageFinder):
+
+            _spy = None
+
+            def __init__(self, *args, **kwargs):
+                super(PackageFinderSpy, self).__init__(*args, **kwargs)
+                PackageFinderSpy._spy = self
+
+        with utils.mock.patch('pur.PackageFinder', wraps=PackageFinderSpy) as mock_finder, \
+                 utils.mock.patch('pip.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+
+            project = 'flask'
+            version = '12.1'
+            link = Link('')
+            candidate = InstallationCandidate(project, version, link)
+            mock_find_all_candidates.return_value = [candidate]
+
+            self.runner.invoke(pur, args)
+
+            self.assertTrue(mock_finder.called)
+
+            self.assertEqual(
+                PackageFinderSpy._spy.index_urls,
+                ['http://pypi.example.com', 'https://pypi.example2.com']
+            )
+            self.assertEqual(
+                PackageFinderSpy._spy.secure_origins,
+                [('*', 'pypi.example.com', '*')]
+            )

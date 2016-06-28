@@ -156,34 +156,40 @@ def get_requirements_and_latest(filename, force=False):
                       a version specified.
     """
     session = PipSession()
+    finder = PackageFinder(
+        session=session, find_links=[], index_urls=[PyPI.simple_url])
 
-    url, content = get_file_content(filename, session=session)
+    _, content = get_file_content(filename, session=session)
     for line_number, line, orig_line in yield_lines(content):
         line = req_file.COMMENT_RE.sub('', line)
         line = line.strip()
-        req = parse_requirement(line, filename, line_number, session)
+        req = parse_requirement(line, filename, line_number, session, finder)
+        if req is None or req.name is None or req_file.SCHEME_RE.match(req.name):
+            yield (orig_line, None, None, None)
+            continue
         spec_ver = current_version(req)
         if spec_ver or force:
-            latest_ver = latest_version(req, session)
+            latest_ver = latest_version(req, session, finder)
             yield (orig_line, req, spec_ver, latest_ver)
         else:
             yield (orig_line, None, None, None)
 
 
-def parse_requirement(line, filename, line_number, session):
+def parse_requirement(line, filename, line_number, session, finder):
     """Parse a requirement line and return an InstallRequirement instance.
 
     :param line:         One line from a requirements.txt file.
     :param filename:     Path to a requirements.txt file.
     :param line_number:  The integer line number of the current line.
     :param session:      Instance of pip.download.PipSession.
+    :param finder:       Instance of pip.download.PackageFinder.
     """
 
     if not line:
         return None
 
-    reqs = list(req_file.process_line(line, filename,
-                                      line_number, session=session))
+    reqs = list(req_file.process_line(
+                line, filename, line_number, session=session, finder=finder))
     return reqs[0] if len(reqs) > 0 else None
 
 
@@ -297,20 +303,17 @@ def join_lines(lines_enum):
         yield primary_line_number, ''.join(new_line), "\n".join(orig_lines)
 
 
-def latest_version(req, session, include_prereleases=False):
+def latest_version(req, session, finder, include_prereleases=False):
     """Returns a Version instance with the latest version for the package.
 
     :param req:                 Instance of
                                 pip.req.req_install.InstallRequirement.
     :param session:             Instance of pip.download.PipSession.
+    :param finder:              Instance of pip.download.PackageFinder.
     :param include_prereleases: Include prereleased beta versions.
     """
     if not req:  # pragma: nocover
         return None
-
-    index_urls = [PyPI.simple_url]
-    finder = PackageFinder(session=session, find_links=[],
-                           index_urls=index_urls)
 
     all_candidates = finder.find_all_candidates(req.name)
 
