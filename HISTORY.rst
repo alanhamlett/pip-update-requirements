@@ -3,7 +3,7 @@ History
 -------
 
 
-3.0.6 (unreleased)
+3.0.6 (2016-09-07)
 ++++++++++++++++++
 
 - Add ability to resolve packages in alternate pypi urls. #11
