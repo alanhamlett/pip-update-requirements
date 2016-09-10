@@ -579,3 +579,24 @@ class BaseTestCase(utils.TestCase):
             self.assertEquals(result.exit_code, 0)
             expected_requirements = open('tests/samples/results/test_interactive_choice_quit').read()
             self.assertEquals(open(requirements).read(), expected_requirements)
+
+    def test_interactive_choice_invalid(self):
+        tempdir = tempfile.mkdtemp()
+        requirements = os.path.join(tempdir, 'requirements.txt')
+        shutil.copy('tests/samples/requirements-multiple.txt', requirements)
+        args = ['-r', requirements, '-i']
+
+        with utils.mock.patch('pip.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+            project = 'flask'
+            version = '0.10.1'
+            link = Link('')
+            candidate = InstallationCandidate(project, version, link)
+            mock_find_all_candidates.return_value = [candidate]
+
+            result = self.runner.invoke(pur, args, input='z\nn\ny\nq\n')
+            self.assertIsNone(result.exception)
+            expected_output = "Update flask from 0.9 to 0.10.1? (y, n, q) [y]: z\nPlease enter either y, n, q.\nUpdate flask from 0.9 to 0.10.1? (y, n, q) [y]: n\nUpdate Alembic from 0.9 to 0.10.1? (y, n, q) [y]: y\nUpdated Alembic: 0.9 -> 0.10.1\nUpdate sqlalchemy from 0.9 to 0.10.1? (y, n, q) [y]: q\nAll requirements up-to-date.\n"
+            self.assertEquals(u(result.output), u(expected_output))
+            self.assertEquals(result.exit_code, 0)
+            expected_requirements = open('tests/samples/results/test_interactive_choice_invalid').read()
+            self.assertEquals(open(requirements).read(), expected_requirements)
