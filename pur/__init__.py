@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-    pip-update-requirements
-    ~~~~~~~~~~~~~~~~~~~~~~~
+    pur
+    ~~~
     Update packages in a requirements.txt file to latest versions.
     :copyright: (c) 2016 Alan Hamlett.
     :license: BSD, see LICENSE for more details.
@@ -40,6 +40,7 @@ from pip.req import req_file
 from pip.req.req_install import Version
 
 from .__about__ import __version__
+from .exceptions import StopUpdating
 
 
 @click.command()
@@ -49,6 +50,8 @@ from .__about__ import __version__
 @click.option('-o', '--output', type=click.Path(),
               help='Output updated packages to this file; Defaults to ' +
               'overwriting the input requirements.txt file.')
+@click.option('-i', '--interactive', is_flag=True, default=False,
+              help='Interactively prompts before updating each package.')
 @click.option('-f', '--force', is_flag=True, default=False,
               help='Force updating packages even when a package has no ' +
               'version specified in the input requirements.txt file.')
@@ -83,34 +86,41 @@ def pur(**options):
 
         buf = StringIO()
         updated = 0
+        stop = False
         for line, req, spec_ver, latest_ver in requirements:
-            if req and req.name.lower() not in options['skip']:
-                if should_update(req, spec_ver, latest_ver,
-                                 force=options['force']):
-                    if not spec_ver[0]:
-                        new_line = '{0}=={1}'.format(line, latest_ver)
-                    else:
-                        new_line = update_requirement(req, line, spec_ver,
-                                                      latest_ver)
-                    buf.write(new_line)
+            if req and req.name.lower() not in options['skip'] and not stop:
+                try:
+                    if should_update(req, spec_ver, latest_ver,
+                                    force=options['force'],
+                                    interactive=options['interactive']):
 
-                    if new_line != line:
-                        echo('Updated {package}: {old} -> {new}'.format(
-                            package=req.name,
-                            old=old_version(spec_ver),
-                            new=latest_ver,
-                        ), options)
-                        updated += 1
+                        if not spec_ver[0]:
+                            new_line = '{0}=={1}'.format(line, latest_ver)
+                        else:
+                            new_line = update_requirement(req, line, spec_ver,
+                                                        latest_ver)
+                        buf.write(new_line)
+
+                        if new_line != line:
+                            echo('Updated {package}: {old} -> {new}'.format(
+                                package=req.name,
+                                old=old_version(spec_ver),
+                                new=latest_ver,
+                            ), **options)
+                            updated += 1
+                        else:
+                            msg = ('New version for {package} found ({new}), ' +
+                                   'but current spec prohibits updating: ' +
+                                   '{line}')
+                            echo(msg.format(
+                                package=req.name,
+                                new=latest_ver,
+                                line=line,
+                            ), **options)
                     else:
-                        msg = ('New version for {package} found ({new}), but ' +
-                              'current spec prohibits updating: ' +
-                              '{line}')
-                        echo(msg.format(
-                            package=req.name,
-                            new=latest_ver,
-                            line=line,
-                        ), options)
-                else:
+                        buf.write(line)
+                except StopUpdating:
+                    stop = True
                     buf.write(line)
             else:
                 buf.write(line)
@@ -123,11 +133,11 @@ def pur(**options):
         with open(options['output'], 'w') as output:
             output.write(buf.getvalue())
     else:
-        click.echo(buf.getvalue())
+        echo(buf.getvalue())
 
     buf.close()
 
-    echo('All requirements up-to-date.', options)
+    echo('All requirements up-to-date.', **options)
 
     if options['nonzero_exit_code']:
         if updated > 0:
@@ -325,7 +335,7 @@ def latest_version(req, session, finder, include_prereleases=False):
     return remote_version
 
 
-def should_update(req, spec_ver, latest_ver, force=False):
+def should_update(req, spec_ver, latest_ver, force=False, interactive=False):
     """Returns True if this requirement should be updated, False otherwise.
 
     :param req:         Instance of pip.req.req_install.InstallRequirement.
@@ -359,7 +369,43 @@ def should_update(req, spec_ver, latest_ver, force=False):
     if lte_ver is not None and not latest_ver <= lte_ver:
         return False
 
-    return True
+    return not interactive or ask_to_update(req, spec_ver, latest_ver)
+
+
+def ask_to_update(req, spec_ver, latest_ver):
+    """Prompts to update the current package.
+
+    Returns True if should update, False if should skip, and raises
+    SaveAndStopUpdating or StopUpdating exceptions if the user selected quit.
+
+    :param req:         Instance of pip.req.req_install.InstallRequirement.
+    :param spec_ver:    Tuple of current versions from the requirements file.
+    :param latest_ver:  Latest version from pypi.
+    """
+
+    choices = ['y', 'n', 'q']
+
+    msg = 'Update {package} from {old} to {new}? ({choices})'.format(
+        package=req.name,
+        old=old_version(spec_ver),
+        new=latest_ver,
+        choices=', '.join(choices),
+    )
+    while True:
+        value = click.prompt(msg, default='y')
+        value = value.lower()
+        if value in choices:
+            break
+        echo('Please enter either {0}.'.format(', '.join(choices)))
+
+    if value == 'y':
+        return True
+    if value == 'n':
+        return False
+
+    # when value == 'q'
+    raise StopUpdating()
+
 
 
 def update_requirement(req, line, spec_ver, latest_ver):
@@ -394,8 +440,8 @@ def update_requirement(req, line, spec_ver, latest_ver):
     return new_line
 
 
-def echo(msg, options):
-    if not options['dry_run']:
+def echo(msg, dry_run=False, **kwargs):
+    if not dry_run:
         click.echo(msg)
 
 
