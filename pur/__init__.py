@@ -58,8 +58,10 @@ from .exceptions import StopUpdating
 @click.option('-d', '--dry-run', is_flag=True, default=False,
               help='Output changes to STDOUT instead of overwriting the ' +
               'requirements.txt file.')
-@click.option('-s', '--skip', type=click.STRING, help='Comma separated list of ' +
-              'packages to skip updating.')
+@click.option('-s', '--skip', type=click.STRING, help='Comma separated list ' +
+              'of packages to skip updating.')
+@click.option('--only', type=click.STRING, help='Comma separated list of ' +
+              'packages. Only these packages will be updated.')
 @click.option('-z', '--nonzero-exit-code', is_flag=True, default=False,
               help='Exit with status l0 when all packages up-to-date, 11 ' +
               'when some packages were updated. Defaults to exit status zero ' +
@@ -76,6 +78,10 @@ def pur(**options):
         options['skip'] = set(x.strip().lower() for x in options['skip'].split(','))
     except AttributeError:
         options['skip'] = set()
+    try:
+        options['only'] = set(x.strip().lower() for x in options['only'].split(','))
+    except AttributeError:
+        options['only'] = set()
 
     # prevent processing nested requirements files
     patch_pip()
@@ -88,7 +94,11 @@ def pur(**options):
         updated = 0
         stop = False
         for line, req, spec_ver, latest_ver in requirements:
-            if req and req.name.lower() not in options['skip'] and not stop:
+
+            if (not stop and req and req.name.lower() not in options['skip']
+                    and (len(options['only']) == 0 or
+                         req.name.lower() in options['only'])):
+
                 try:
                     if should_update(req, spec_ver, latest_ver,
                                     force=options['force'],
@@ -117,13 +127,16 @@ def pur(**options):
                                 new=latest_ver,
                                 line=line,
                             ), **options)
+
                     else:
                         buf.write(line)
                 except StopUpdating:
                     stop = True
                     buf.write(line)
+
             else:
                 buf.write(line)
+
             buf.write("\n")
 
     except InstallationError as e:
