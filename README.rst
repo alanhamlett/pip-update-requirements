@@ -61,12 +61,15 @@ Options
                          if it exist.
 -o, --output PATH        Output updated packages to this file; Defaults to
                          overwriting the input requirements.txt file.
+-i, --interactive        Interactively prompts before updating each package.
 -f, --force              Force updating packages even when a package has no
                          version specified in the input requirements.txt
                          file.
 -d, --dry-run            Output changes to STDOUT instead of overwriting the
                          requirements.txt file.
 -s, --skip TEXT          Comma separated list of packages to skip updating.
+--only TEXT              Comma separated list of packages. Only these
+                         packages will be updated.
 -z, --nonzero-exit-code  Exit with status l0 when all packages up-to-date,
                          11 when some packages were updated. Defaults to
                          exit status zero on success and non-zero on
