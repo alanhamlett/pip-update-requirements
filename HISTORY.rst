@@ -3,6 +3,13 @@ History
 -------
 
 
+3.0.7 (2016-09-10)
+++++++++++++++++++
+
+- New --interactive option to prompt before updating each package. #12
+- New --only option to only update specified packages. #13
+
+
 3.0.6 (2016-09-07)
 ++++++++++++++++++
 
