@@ -3,6 +3,13 @@ History
 -------
 
 
+4.0.0 (2016-09-13)
+++++++++++++++++++
+
+- Now updates packages in nested requirements files. #14
+- New --no-recursive option to prevent updating nested requirements files.
+
+
 3.0.7 (2016-09-10)
 ++++++++++++++++++
 
