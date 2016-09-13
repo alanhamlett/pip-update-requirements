@@ -67,6 +67,7 @@ Options
                          file.
 -d, --dry-run            Output changes to STDOUT instead of overwriting the
                          requirements.txt file.
+-n, --no-recursive       Prevents updating nested requirements files.
 -s, --skip TEXT          Comma separated list of packages to skip updating.
 --only TEXT              Comma separated list of packages. Only these
                          packages will be updated.

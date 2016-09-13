@@ -56,6 +56,31 @@ class BaseTestCase(utils.TestCase):
             expected_requirements = open('tests/samples/results/test_updates_package').read()
             self.assertEquals(open(requirements).read(), expected_requirements)
 
+    def test_updates_package_in_nested_requirements(self):
+        tempdir = tempfile.mkdtemp()
+        requirements = os.path.join(tempdir, 'requirements-with-nested-reqfile.txt')
+        requirements_nested = os.path.join(tempdir, 'requirements-nested.txt')
+        shutil.copy('tests/samples/requirements-with-nested-reqfile.txt', requirements)
+        shutil.copy('tests/samples/requirements-nested.txt', requirements_nested)
+        args = ['-r', requirements]
+
+        with utils.mock.patch('pip.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+            project = 'readtime'
+            version = '0.10.1'
+            link = Link('')
+            candidate = InstallationCandidate(project, version, link)
+            mock_find_all_candidates.return_value = [candidate]
+
+            result = self.runner.invoke(pur, args)
+            self.assertIsNone(result.exception)
+            expected_output = "Updated readtime: 0.9 -> 0.10.1\nAll requirements up-to-date.\n"
+            self.assertEquals(u(result.output), u(expected_output))
+            self.assertEquals(result.exit_code, 0)
+            expected_requirements = open('tests/samples/results/test_updates_package_in_nested_requirements').read()
+            self.assertEquals(open(requirements).read(), expected_requirements)
+            expected_requirements = open('tests/samples/results/test_updates_package_in_nested_requirements_nested').read()
+            self.assertEquals(open(requirements_nested).read(), expected_requirements)
+
     def test_requirements_long_option_accepted(self):
         tempdir = tempfile.mkdtemp()
         requirements = os.path.join(tempdir, 'requirements.txt')
@@ -96,6 +121,35 @@ class BaseTestCase(utils.TestCase):
             self.assertEquals(u(result.output), u(expected_output))
             self.assertEquals(result.exit_code, 0)
             self.assertEquals(open('tests/samples/requirements.txt').read(), requirements)
+
+    def test_does_not_update_nested_requirements_to_output_file(self):
+        tempdir = tempfile.mkdtemp()
+        output = os.path.join(tempdir, 'output.txt')
+        requirements = os.path.join(tempdir, 'requirements-with-nested-reqfile.txt')
+        requirements_nested = os.path.join(tempdir, 'requirements-nested.txt')
+        shutil.copy('tests/samples/requirements-with-nested-reqfile.txt', requirements)
+        shutil.copy('tests/samples/requirements-nested.txt', requirements_nested)
+        args = ['-r', requirements, '--output', output]
+
+        with utils.mock.patch('pip.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+            project = 'readtime'
+            version = '0.10.1'
+            link = Link('')
+            candidate = InstallationCandidate(project, version, link)
+            mock_find_all_candidates.return_value = [candidate]
+
+            result = self.runner.invoke(pur, args)
+            self.assertIsNone(result.exception)
+            expected_output = "All requirements up-to-date.\n"
+            self.assertEquals(u(result.output), u(expected_output))
+            self.assertEquals(result.exit_code, 0)
+
+            expected_requirements = open('tests/samples/requirements-with-nested-reqfile.txt').read()
+            self.assertEquals(open(requirements).read(), expected_requirements)
+            expected_requirements = open('tests/samples/requirements-nested.txt').read()
+            self.assertEquals(open(requirements_nested).read(), expected_requirements)
+            expected_requirements = open('tests/samples/results/test_updates_package_in_nested_requirements').read()
+            self.assertEquals(open(output).read(), expected_requirements)
 
     def test_exit_code_from_no_updates(self):
         tempdir = tempfile.mkdtemp()
@@ -138,6 +192,57 @@ class BaseTestCase(utils.TestCase):
             self.assertEquals(result.exit_code, 11)
             expected_requirements = open('tests/samples/results/test_updates_package').read()
             self.assertEquals(open(requirements).read(), expected_requirements)
+
+    def test_exit_code_from_nested_requirements_file(self):
+        tempdir = tempfile.mkdtemp()
+        requirements = os.path.join(tempdir, 'requirements-with-nested-reqfile.txt')
+        requirements_nested = os.path.join(tempdir, 'requirements-nested.txt')
+        shutil.copy('tests/samples/requirements-with-nested-reqfile.txt', requirements)
+        shutil.copy('tests/samples/requirements-nested.txt', requirements_nested)
+        args = ['-r', requirements, '--nonzero-exit-code']
+
+        with utils.mock.patch('pip.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+            project = 'readtime'
+            version = '0.10.1'
+            link = Link('')
+            candidate = InstallationCandidate(project, version, link)
+            mock_find_all_candidates.return_value = [candidate]
+
+            result = self.runner.invoke(pur, args)
+            self.assertEqual(result.exception.code, 11)
+            expected_output = "Updated readtime: 0.9 -> 0.10.1\nAll requirements up-to-date.\n"
+            self.assertEquals(u(result.output), u(expected_output))
+            self.assertEquals(result.exit_code, 11)
+            expected_requirements = open('tests/samples/results/test_updates_package_in_nested_requirements').read()
+            self.assertEquals(open(requirements).read(), expected_requirements)
+            expected_requirements = open('tests/samples/results/test_updates_package_in_nested_requirements_nested').read()
+            self.assertEquals(open(requirements_nested).read(), expected_requirements)
+
+    def test_no_recursive_option(self):
+        tempdir = tempfile.mkdtemp()
+        requirements = os.path.join(tempdir, 'requirements-with-nested-reqfile.txt')
+        requirements_nested = os.path.join(tempdir, 'requirements-nested.txt')
+        shutil.copy('tests/samples/requirements-with-nested-reqfile.txt', requirements)
+        shutil.copy('tests/samples/requirements-nested.txt', requirements_nested)
+        args = ['-r', requirements, '-n']
+
+        with utils.mock.patch('pip.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+            project = 'readtime'
+            version = '0.10.1'
+            link = Link('')
+            candidate = InstallationCandidate(project, version, link)
+            mock_find_all_candidates.return_value = [candidate]
+
+            result = self.runner.invoke(pur, args)
+            self.assertIsNone(result.exception)
+            expected_output = "All requirements up-to-date.\n"
+            self.assertEquals(u(result.output), u(expected_output))
+            self.assertEquals(result.exit_code, 0)
+
+            expected_requirements = open('tests/samples/requirements-with-nested-reqfile.txt').read()
+            self.assertEquals(open(requirements).read(), expected_requirements)
+            expected_requirements = open('tests/samples/requirements-nested.txt').read()
+            self.assertEquals(open(requirements_nested).read(), expected_requirements)
 
     def test_skip_package(self):
         tempdir = tempfile.mkdtemp()
@@ -391,7 +496,7 @@ class BaseTestCase(utils.TestCase):
             self.assertEquals(open(tmpfile).read(), expected_requirements)
 
     def test_notequal_version_spec_prevents_updating_package(self):
-        requirements = 'tests/samples/requirements-with-multiline.txt'
+        requirements = 'tests/samples/requirements-multiline.txt'
         tempdir = tempfile.mkdtemp()
         tmpfile = os.path.join(tempdir, 'requirements.txt')
         shutil.copy(requirements, tmpfile)
@@ -413,7 +518,7 @@ class BaseTestCase(utils.TestCase):
             self.assertEquals(open(tmpfile).read(), expected_requirements)
 
     def test_updates_package_with_multiline_spec(self):
-        requirements = 'tests/samples/requirements-with-multiline.txt'
+        requirements = 'tests/samples/requirements-multiline.txt'
         tempdir = tempfile.mkdtemp()
         tmpfile = os.path.join(tempdir, 'requirements.txt')
         shutil.copy(requirements, tmpfile)
@@ -435,7 +540,7 @@ class BaseTestCase(utils.TestCase):
             self.assertEquals(open(tmpfile).read(), expected_requirements)
 
     def test_does_not_update_package_with_multiline_spec(self):
-        requirements = 'tests/samples/requirements-with-multiline.txt'
+        requirements = 'tests/samples/requirements-multiline.txt'
         tempdir = tempfile.mkdtemp()
         tmpfile = os.path.join(tempdir, 'requirements.txt')
         shutil.copy(requirements, tmpfile)
@@ -494,10 +599,41 @@ class BaseTestCase(utils.TestCase):
 
             result = self.runner.invoke(pur, args)
             self.assertIsNone(result.exception)
-            expected_output = open('tests/samples/results/test_updates_package').read() + "\n"
+            expected_output = '==> ' + tmpfile + ' <==\n' + \
+                open('tests/samples/results/test_updates_package').read() + "\n"
             self.assertEquals(u(result.output), u(expected_output))
             self.assertEquals(result.exit_code, 0)
             self.assertEquals(open(tmpfile).read(), open(requirements).read())
+
+    def test_dry_run_with_nested_requirements_file(self):
+        tempdir = tempfile.mkdtemp()
+        requirements = os.path.join(tempdir, 'requirements-with-nested-reqfile.txt')
+        requirements_nested = os.path.join(tempdir, 'requirements-nested.txt')
+        shutil.copy('tests/samples/requirements-with-nested-reqfile.txt', requirements)
+        shutil.copy('tests/samples/requirements-nested.txt', requirements_nested)
+        args = ['-r', requirements, '-d']
+
+        with utils.mock.patch('pip.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+            project = 'readtime'
+            version = '0.10.1'
+            link = Link('')
+            candidate = InstallationCandidate(project, version, link)
+            mock_find_all_candidates.return_value = [candidate]
+
+            result = self.runner.invoke(pur, args)
+            self.assertIsNone(result.exception)
+            self.assertEquals(result.exit_code, 0)
+
+            expected_output = '==> ' + requirements_nested + ' <==\n' + \
+                open('tests/samples/results/test_updates_package_in_nested_requirements_nested').read() + "\n" + \
+                '==> ' + requirements + ' <==\n' + \
+                open('tests/samples/results/test_updates_package_in_nested_requirements').read() + "\n"
+            self.assertEquals(u(result.output), u(expected_output))
+
+            expected_requirements = open('tests/samples/requirements-with-nested-reqfile.txt').read()
+            self.assertEquals(open(requirements).read(), expected_requirements)
+            expected_requirements = open('tests/samples/requirements-nested.txt').read()
+            self.assertEquals(open(requirements_nested).read(), expected_requirements)
 
     def test_updates_from_alt_index_url(self):
         requirements = 'tests/samples/requirements-with-alt-index-url.txt'

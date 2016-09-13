@@ -58,6 +58,8 @@ from .exceptions import StopUpdating
 @click.option('-d', '--dry-run', is_flag=True, default=False,
               help='Output changes to STDOUT instead of overwriting the ' +
               'requirements.txt file.')
+@click.option('-n', '--no-recursive', is_flag=True, default=False,
+              help='Prevents updating nested requirements files.')
 @click.option('-s', '--skip', type=click.STRING, help='Comma separated list ' +
               'of packages to skip updating.')
 @click.option('--only', type=click.STRING, help='Comma separated list of ' +
@@ -72,8 +74,6 @@ def pur(**options):
 
     if not options['requirement']:
         options['requirement'] = 'requirements.txt'
-    if not options['output']:
-        options['output'] = options['requirement']
     try:
         options['skip'] = set(x.strip().lower() for x in options['skip'].split(','))
     except AttributeError:
@@ -83,15 +83,42 @@ def pur(**options):
     except AttributeError:
         options['only'] = set()
 
-    # prevent processing nested requirements files
-    patch_pip()
+    global UPDATED
+    UPDATED = 0
+
+    # patch pip for handling nested requirements files
+    patch_pip(options)
+
+    output_filename = options['output'] or options['requirement']
+    update_requirements(options['requirement'], output_filename, options)
+
+    echo('All requirements up-to-date.', **options)
+
+    if options['nonzero_exit_code']:
+        if UPDATED > 0:
+            raise ExitCodeException(11)
+        raise ExitCodeException(10)
+
+
+def update_requirements(filename, output_filename, options):
+    """Update a requirements file.
+
+    Returns the number of updated packages as an int.
+
+    :param filename:        Path to a requirements.txt file.
+    :param output_filename: Path to the output requirements.txt file.
+    :param options:         Dict containing original command line arguments.
+    """
+
+    global UPDATED
+
+    updated = 0
+    buf = StringIO()
 
     try:
-        requirements = get_requirements_and_latest(options['requirement'],
+        requirements = get_requirements_and_latest(filename,
                                                    force=options['force'])
 
-        buf = StringIO()
-        updated = 0
         stop = False
         for line, req, spec_ver, latest_ver in requirements:
 
@@ -143,29 +170,35 @@ def pur(**options):
         raise click.ClickException(str(e))
 
     if not options['dry_run']:
-        with open(options['output'], 'w') as output:
+        with open(output_filename, 'w') as output:
             output.write(buf.getvalue())
     else:
+        echo('==> ' + output_filename + ' <==')
         echo(buf.getvalue())
 
     buf.close()
 
-    echo('All requirements up-to-date.', **options)
-
-    if options['nonzero_exit_code']:
-        if updated > 0:
-            raise ExitCodeException(11)
-        raise ExitCodeException(10)
+    UPDATED += updated
 
 
-def patch_pip():
-    """Patch pip to prevent parsing nested requirements files."""
+def patch_pip(options):
+    """Patch pip to also update nested requirements files.
 
-    old_fn = req_file.parse_requirements
+    :param options:  Dict containing original command line arguments.
+    """
+
+    global UPDATED
+    seen = []
     def patched_parse_requirements(*args, **kwargs):
+        global UPDATED
+        if not options['no_recursive']:
+            filename = args[0]
+            if not options['output'] and filename not in seen:
+                if os.path.isfile(filename):
+                    seen.append(filename)
+                    update_requirements(filename, filename, options)
         return []
     req_file.parse_requirements = patched_parse_requirements
-    return old_fn
 
 
 def get_requirements_and_latest(filename, force=False):
@@ -186,7 +219,7 @@ def get_requirements_and_latest(filename, force=False):
     for line_number, line, orig_line in yield_lines(content):
         line = req_file.COMMENT_RE.sub('', line)
         line = line.strip()
-        req = parse_requirement(line, filename, line_number, session, finder)
+        req = parse_requirement_line(line, filename, line_number, session, finder)
         if req is None or req.name is None or req_file.SCHEME_RE.match(req.name):
             yield (orig_line, None, None, None)
             continue
@@ -196,7 +229,7 @@ def get_requirements_and_latest(filename, force=False):
             yield (orig_line, req, spec_ver, latest_ver)
 
 
-def parse_requirement(line, filename, line_number, session, finder):
+def parse_requirement_line(line, filename, line_number, session, finder):
     """Parse a requirement line and return an InstallRequirement instance.
 
     :param line:         One line from a requirements.txt file.
