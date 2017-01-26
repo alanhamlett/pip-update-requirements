@@ -583,6 +583,28 @@ class BaseTestCase(utils.TestCase):
             expected_requirements = open('tests/samples/results/test_updates_package_with_min_version_spec').read()
             self.assertEquals(open(tmpfile).read(), expected_requirements)
 
+    def test_updates_package_with_wildcard_spec(self):
+        requirements = 'tests/samples/requirements-with-wildcard-spec.txt'
+        tempdir = tempfile.mkdtemp()
+        tmpfile = os.path.join(tempdir, 'requirements.txt')
+        shutil.copy(requirements, tmpfile)
+        args = ['-r', tmpfile]
+
+        with utils.mock.patch('pip.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+            project = 'django'
+            version = '1.0'
+            link = Link('')
+            candidate = InstallationCandidate(project, version, link)
+            mock_find_all_candidates.return_value = [candidate]
+
+            result = self.runner.invoke(pur, args)
+            expected_output = "Updated flask: 0.9 -> 1.0\nAll requirements up-to-date.\n"
+            self.assertEquals(u(result.output), u(expected_output))
+            self.assertIsNone(result.exception)
+            self.assertEquals(result.exit_code, 0)
+            expected_requirements = open('tests/samples/results/test_updates_package_with_wildcard_spec').read()
+            self.assertEquals(open(tmpfile).read(), expected_requirements)
+
     def test_dry_run(self):
         requirements = 'tests/samples/requirements.txt'
         tempdir = tempfile.mkdtemp()

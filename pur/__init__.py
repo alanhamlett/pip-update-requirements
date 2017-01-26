@@ -38,6 +38,7 @@ from pip.index import PackageFinder
 from pip.models.index import PyPI
 from pip.req import req_file
 from pip.req.req_install import Version
+from pip._vendor.packaging.version import InvalidVersion
 
 from .__about__ import __version__
 from .exceptions import StopUpdating
@@ -266,7 +267,10 @@ def current_version(req):
     not_ver = None
     for spec in req.req.specifier:
         operator, version = spec._spec
-        ver = Version(version)
+        try:
+            ver = Version(version)
+        except InvalidVersion:
+            continue
         if operator == '==':
             eq_ver = ver
         elif operator == '>':
