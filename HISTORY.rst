@@ -3,6 +3,13 @@ History
 -------
 
 
+4.0.1 (2017-01-26)
+++++++++++++++++++
+
+- Catch InvalidVersion and skip the requirement without modifying. #15
+- Upgrade packaged pip to 9.1.0.dev0.
+
+
 4.0.0 (2016-09-13)
 ++++++++++++++++++
 
