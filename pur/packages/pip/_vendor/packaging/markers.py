@@ -8,9 +8,7 @@ import os
 import platform
 import sys
 
-from pip._vendor.pyparsing import (
-    ParseException, ParseResults, stringStart, stringEnd,
-)
+from pip._vendor.pyparsing import ParseException, ParseResults, stringStart, stringEnd
 from pip._vendor.pyparsing import ZeroOrMore, Group, Forward, QuotedString
 from pip._vendor.pyparsing import Literal as L  # noqa
 
@@ -54,13 +52,26 @@ class Node(object):
     def __repr__(self):
         return "<{0}({1!r})>".format(self.__class__.__name__, str(self))
 
+    def serialize(self):
+        raise NotImplementedError
+
 
 class Variable(Node):
-    pass
+
+    def serialize(self):
+        return str(self)
 
 
 class Value(Node):
-    pass
+
+    def serialize(self):
+        return '"{0}"'.format(self)
+
+
+class Op(Node):
+
+    def serialize(self):
+        return str(self)
 
 
 VARIABLE = (
@@ -75,9 +86,23 @@ VARIABLE = (
     L("python_version") |
     L("sys_platform") |
     L("os_name") |
+    L("os.name") |  # PEP-345
+    L("sys.platform") |  # PEP-345
+    L("platform.version") |  # PEP-345
+    L("platform.machine") |  # PEP-345
+    L("platform.python_implementation") |  # PEP-345
+    L("python_implementation") |  # undocumented setuptools legacy
     L("extra")
 )
-VARIABLE.setParseAction(lambda s, l, t: Variable(t[0]))
+ALIASES = {
+    'os.name': 'os_name',
+    'sys.platform': 'sys_platform',
+    'platform.version': 'platform_version',
+    'platform.machine': 'platform_machine',
+    'platform.python_implementation': 'platform_python_implementation',
+    'python_implementation': 'platform_python_implementation'
+}
+VARIABLE.setParseAction(lambda s, l, t: Variable(ALIASES.get(t[0], t[0])))
 
 VERSION_CMP = (
     L("===") |
@@ -91,6 +116,7 @@ VERSION_CMP = (
 )
 
 MARKER_OP = VERSION_CMP | L("not in") | L("in")
+MARKER_OP.setParseAction(lambda s, l, t: Op(t[0]))
 
 MARKER_VALUE = QuotedString("'") | QuotedString('"')
 MARKER_VALUE.setParseAction(lambda s, l, t: Value(t[0]))
@@ -137,7 +163,7 @@ def _format_marker(marker, first=True):
         else:
             return "(" + " ".join(inner) + ")"
     elif isinstance(marker, tuple):
-        return '{0} {1} "{2}"'.format(*marker)
+        return " ".join([m.serialize() for m in marker])
     else:
         return marker
 
@@ -156,13 +182,13 @@ _operators = {
 
 def _eval_op(lhs, op, rhs):
     try:
-        spec = Specifier("".join([op, rhs]))
+        spec = Specifier("".join([op.serialize(), rhs]))
     except InvalidSpecifier:
         pass
     else:
         return spec.contains(lhs)
 
-    oper = _operators.get(op)
+    oper = _operators.get(op.serialize())
     if oper is None:
         raise UndefinedComparison(
             "Undefined {0!r} on {1!r} and {2!r}.".format(op, lhs, rhs)

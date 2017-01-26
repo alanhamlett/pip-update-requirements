@@ -6,7 +6,6 @@ import sys
 import warnings
 import platform
 import logging
-import ctypes
 
 try:
     import sysconfig
@@ -16,7 +15,7 @@ except ImportError:  # pragma nocover
 import distutils.util
 
 from pip.compat import OrderedDict
-
+import pip.utils.glibc
 
 logger = logging.getLogger(__name__)
 
@@ -125,7 +124,7 @@ def get_platform():
     if sys.platform == 'darwin':
         # distutils.util.get_platform() returns the release based on the value
         # of MACOSX_DEPLOYMENT_TARGET on which Python was built, which may
-        # be signficantly older than the user's current machine.
+        # be significantly older than the user's current machine.
         release, _, machine = platform.mac_ver()
         split_ver = release.split('.')
 
@@ -160,46 +159,17 @@ def is_manylinux1_compatible():
         pass
 
     # Check glibc version. CentOS 5 uses glibc 2.5.
-    return have_compatible_glibc(2, 5)
-
-
-def have_compatible_glibc(major, minimum_minor):
-    # ctypes.CDLL(None) internally calls dlopen(NULL), and as the dlopen
-    # manpage says, "If filename is NULL, then the returned handle is for the
-    # main program". This way we can let the linker do the work to figure out
-    # which libc our process is actually using.
-    process_namespace = ctypes.CDLL(None)
-    try:
-        gnu_get_libc_version = process_namespace.gnu_get_libc_version
-    except AttributeError:
-        # Symbol doesn't exist -> therefore, we are not linked to
-        # glibc.
-        return False
-
-    # Call gnu_get_libc_version, which returns a string like "2.5".
-    gnu_get_libc_version.restype = ctypes.c_char_p
-    version_str = gnu_get_libc_version()
-    # py2 / py3 compatibility:
-    if not isinstance(version_str, str):
-        version_str = version_str.decode("ascii")
-
-    # Parse string and check against requested version.
-    version = [int(piece) for piece in version_str.split(".")]
-    if len(version) < 2:
-        warnings.warn("Expected glibc version with 2 components major.minor,"
-                      " got: %s" % version_str, RuntimeWarning)
-        return False
-    return version[0] == major and version[1] >= minimum_minor
+    return pip.utils.glibc.have_compatible_glibc(2, 5)
 
 
 def get_darwin_arches(major, minor, machine):
     """Return a list of supported arches (including group arches) for
-    the given major, minor and machine architecture of an OS X machine.
+    the given major, minor and machine architecture of an macOS machine.
     """
     arches = []
 
     def _supports_arch(major, minor, arch):
-        # Looking at the application support for OS X versions in the chart
+        # Looking at the application support for macOS versions in the chart
         # provided by https://en.wikipedia.org/wiki/OS_X#Versions it appears
         # our timeline looks roughly like:
         #
@@ -253,12 +223,19 @@ def get_darwin_arches(major, minor, machine):
     return arches
 
 
-def get_supported(versions=None, noarch=False):
+def get_supported(versions=None, noarch=False, platform=None,
+                  impl=None, abi=None):
     """Return a list of supported tags for each version specified in
     `versions`.
 
     :param versions: a list of string versions, of the form ["33", "32"],
         or None. The first version will be assumed to support our ABI.
+    :param platform: specify the exact platform you want valid
+        tags for, or None. If None, use the local system platform.
+    :param impl: specify the exact implementation you want valid
+        tags for, or None. If None, use the local interpreter impl.
+    :param abi: specify the exact abi you want valid
+        tags for, or None. If None, use the local interpreter abi.
     """
     supported = []
 
@@ -271,11 +248,11 @@ def get_supported(versions=None, noarch=False):
         for minor in range(version_info[-1], -1, -1):
             versions.append(''.join(map(str, major + (minor,))))
 
-    impl = get_abbr_impl()
+    impl = impl or get_abbr_impl()
 
     abis = []
 
-    abi = get_abi_tag()
+    abi = abi or get_abi_tag()
     if abi:
         abis[0:0] = [abi]
 
@@ -290,8 +267,8 @@ def get_supported(versions=None, noarch=False):
     abis.append('none')
 
     if not noarch:
-        arch = get_platform()
-        if sys.platform == 'darwin':
+        arch = platform or get_platform()
+        if arch.startswith('macosx'):
             # support macosx-10.6-intel on macosx-10.9-x86_64
             match = _osx_arch_pat.match(arch)
             if match:
@@ -304,7 +281,7 @@ def get_supported(versions=None, noarch=False):
             else:
                 # arch pattern didn't match (?!)
                 arches = [arch]
-        elif is_manylinux1_compatible():
+        elif platform is None and is_manylinux1_compatible():
             arches = [arch.replace('linux', 'manylinux1'), arch]
         else:
             arches = [arch]
@@ -313,6 +290,15 @@ def get_supported(versions=None, noarch=False):
         for abi in abis:
             for arch in arches:
                 supported.append(('%s%s' % (impl, versions[0]), abi, arch))
+
+        # abi3 modules compatible with older version of Python
+        for version in versions[1:]:
+            # abi3 was introduced in Python 3.2
+            if version in ('31', '30'):
+                break
+            for abi in abi3s:   # empty set if not Python 3
+                for arch in arches:
+                    supported.append(("%s%s" % (impl, version), abi, arch))
 
         # Has binaries, does not use the Python API:
         for arch in arches:

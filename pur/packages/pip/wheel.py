@@ -6,7 +6,6 @@ from __future__ import absolute_import
 import compileall
 import csv
 import errno
-import functools
 import hashlib
 import logging
 import os
@@ -39,7 +38,6 @@ from pip.utils.setuptools_build import SETUPTOOLS_SHIM
 from pip._vendor.distlib.scripts import ScriptMaker
 from pip._vendor import pkg_resources
 from pip._vendor.packaging.utils import canonicalize_name
-from pip._vendor.six.moves import configparser
 
 
 wheel_ext = '.whl'
@@ -224,16 +222,19 @@ def get_entrypoints(filename):
             data.write("\n")
         data.seek(0)
 
-    cp = configparser.RawConfigParser()
-    cp.optionxform = lambda option: option
-    cp.readfp(data)
+    # get the entry points and then the script names
+    entry_points = pkg_resources.EntryPoint.parse_map(data)
+    console = entry_points.get('console_scripts', {})
+    gui = entry_points.get('gui_scripts', {})
 
-    console = {}
-    gui = {}
-    if cp.has_section('console_scripts'):
-        console = dict(cp.items('console_scripts'))
-    if cp.has_section('gui_scripts'):
-        gui = dict(cp.items('gui_scripts'))
+    def _split_ep(s):
+        """get the string representation of EntryPoint, remove space and split
+        on '='"""
+        return str(s).replace(" ", "").split("=")
+
+    # convert the EntryPoint objects into strings with module:function
+    console = dict(_split_ep(v) for v in console.values())
+    gui = dict(_split_ep(v) for v in gui.values())
     return console, gui
 
 
@@ -298,10 +299,11 @@ def move_wheel_files(name, req, wheeldir, user=False, home=None, root=None,
                     continue
                 elif (is_base and
                         s.endswith('.dist-info') and
-                        # is self.req.project_name case preserving?
-                        s.lower().startswith(
-                            req.project_name.replace('-', '_').lower())):
-                    assert not info_dir, 'Multiple .dist-info directories'
+                        canonicalize_name(s).startswith(
+                            canonicalize_name(req.name))):
+                    assert not info_dir, ('Multiple .dist-info directories: ' +
+                                          destsubdir + ', ' +
+                                          ', '.join(info_dir))
                     info_dir.append(destsubdir)
             for f in files:
                 # Skip unwanted files
@@ -417,7 +419,7 @@ import sys
 from %(module)s import %(import_name)s
 
 if __name__ == '__main__':
-    sys.argv[0] = re.sub(r'(-script\.pyw|\.exe)?$', '', sys.argv[0])
+    sys.argv[0] = re.sub(r'(-script\.pyw?|\.exe)?$', '', sys.argv[0])
     sys.exit(%(func)s())
 """
 
@@ -438,7 +440,7 @@ if __name__ == '__main__':
     # Because setuptools and pip are bundled with _ensurepip and virtualenv,
     # we need to use universal wheels. So, as a stopgap until Metadata 2.0, we
     # override the versioned entry points in the wheel and generate the
-    # correct ones. This code is purely a short-term measure until Metadat 2.0
+    # correct ones. This code is purely a short-term measure until Metadata 2.0
     # is available.
     #
     # To add the level of hack in this section of code, in order to support
@@ -524,40 +526,6 @@ if __name__ == '__main__':
             for f in installed:
                 writer.writerow((installed[f], '', ''))
     shutil.move(temp_record, record)
-
-
-def _unique(fn):
-    @functools.wraps(fn)
-    def unique(*args, **kw):
-        seen = set()
-        for item in fn(*args, **kw):
-            if item not in seen:
-                seen.add(item)
-                yield item
-    return unique
-
-
-# TODO: this goes somewhere besides the wheel module
-@_unique
-def uninstallation_paths(dist):
-    """
-    Yield all the uninstallation paths for dist based on RECORD-without-.pyc
-
-    Yield paths to all the files in RECORD. For each .py file in RECORD, add
-    the .pyc in the same directory.
-
-    UninstallPathSet.add() takes care of the __pycache__ .pyc.
-    """
-    from pip.utils import FakeFile  # circular import
-    r = csv.reader(FakeFile(dist.get_metadata_lines('RECORD')))
-    for row in r:
-        path = os.path.join(dist.location, row[0])
-        yield path
-        if path.endswith('.py'):
-            dn, fn = os.path.split(path)
-            base = fn[:-3]
-            path = os.path.join(dn, base + '.pyc')
-            yield path
 
 
 def wheel_version(source_dir):
@@ -757,11 +725,8 @@ class WheelBuilder(object):
                 if not autobuilding:
                     logger.info(
                         'Skipping %s, due to already being wheel.', req.name)
-            elif req.editable:
-                if not autobuilding:
-                    logger.info(
-                        'Skipping bdist_wheel for %s, due to being editable',
-                        req.name)
+            elif autobuilding and req.editable:
+                pass
             elif autobuilding and req.link and not req.link.is_artifact:
                 pass
             elif autobuilding and not req.source_dir:
@@ -801,8 +766,8 @@ class WheelBuilder(object):
                     try:
                         ensure_dir(output_dir)
                     except OSError as e:
-                        logger.warn("Building wheel for %s failed: %s",
-                                    req.name, e)
+                        logger.warning("Building wheel for %s failed: %s",
+                                       req.name, e)
                         build_failure.append(req)
                         continue
                 else:

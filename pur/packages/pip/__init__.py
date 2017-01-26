@@ -10,6 +10,18 @@ import warnings
 import sys
 import re
 
+# 2016-06-17 barry@debian.org: urllib3 1.14 added optional support for socks,
+# but if invoked (i.e. imported), it will issue a warning to stderr if socks
+# isn't available.  requests unconditionally imports urllib3's socks contrib
+# module, triggering this warning.  The warning breaks DEP-8 tests (because of
+# the stderr output) and is just plain annoying in normal usage.  I don't want
+# to add socks as yet another dependency for pip, nor do I want to allow-stder
+# in the DEP-8 tests, so just suppress the warning.  pdb tells me this has to
+# be done before the import of pip.vcs.
+from pip._vendor.requests.packages.urllib3.exceptions import DependencyWarning
+warnings.filterwarnings("ignore", category=DependencyWarning)  # noqa
+
+
 from pip.exceptions import InstallationError, CommandError, PipError
 from pip.utils import get_installed_distributions, get_prog
 from pip.utils import deprecation, dist_is_editable
@@ -31,12 +43,12 @@ import pip.cmdoptions
 cmdoptions = pip.cmdoptions
 
 # The version as used in the setup.py and the docs conf.py
-__version__ = "8.1.1"
+__version__ = "9.1.0.dev0"
 
 
 logger = logging.getLogger(__name__)
 
-# Hide the InsecureRequestWArning from urllib3
+# Hide the InsecureRequestWarning from urllib3
 warnings.filterwarnings("ignore", category=InsecureRequestWarning)
 
 
@@ -44,7 +56,7 @@ def autocomplete():
     """Command and option completion for the main option parser (and options)
     and its subcommands (and options).
 
-    Enable by sourcing one of the completion shell scripts (bash or zsh).
+    Enable by sourcing one of the completion shell scripts (bash, zsh or fish).
     """
     # Don't complete if user hasn't sourced bash_completion file.
     if 'PIP_AUTO_COMPLETE' not in os.environ:
@@ -212,7 +224,11 @@ def main(args=None):
 
     # Needed for locale.getpreferredencoding(False) to work
     # in pip.utils.encoding.auto_decode
-    locale.setlocale(locale.LC_ALL, '')
+    try:
+        locale.setlocale(locale.LC_ALL, '')
+    except locale.Error as e:
+        # setlocale can apparently crash if locale are uninitialized
+        logger.debug("Ignoring error %s when setting locale", e)
     command = commands_dict[cmd_name](isolated=check_isolated(cmd_args))
     return command.main(cmd_args)
 

@@ -80,21 +80,27 @@ class Retry(object):
         Set of uppercased HTTP method verbs that we should retry on.
 
         By default, we only retry on methods which are considered to be
-        indempotent (multiple requests with the same parameters end with the
+        idempotent (multiple requests with the same parameters end with the
         same state). See :attr:`Retry.DEFAULT_METHOD_WHITELIST`.
 
+        Set to a ``False`` value to retry on any verb.
+
     :param iterable status_forcelist:
-        A set of HTTP status codes that we should force a retry on.
+        A set of integer HTTP status codes that we should force a retry on.
+        A retry is initiated if the request method is in ``method_whitelist``
+        and the response status code is in ``status_forcelist``.
 
         By default, this is disabled with ``None``.
 
     :param float backoff_factor:
-        A backoff factor to apply between attempts. urllib3 will sleep for::
+        A backoff factor to apply between attempts after the second try
+        (most errors are resolved immediately by a second try without a
+        delay). urllib3 will sleep for::
 
             {backoff factor} * (2 ^ ({number of total retries} - 1))
 
         seconds. If the backoff_factor is 0.1, then :func:`.sleep` will sleep
-        for [0.1s, 0.2s, 0.4s, ...] between retries. It will never be longer
+        for [0.0s, 0.2s, 0.4s, ...] between retries. It will never be longer
         than :attr:`Retry.BACKOFF_MAX`.
 
         By default, backoff is disabled (set to 0).
@@ -102,6 +108,11 @@ class Retry(object):
     :param bool raise_on_redirect: Whether, if the number of redirects is
         exhausted, to raise a MaxRetryError, or to return a response with a
         response code in the 3xx range.
+
+    :param bool raise_on_status: Similar meaning to ``raise_on_redirect``:
+        whether we should raise an exception, or return a response,
+        if status falls in ``status_forcelist`` range and retries have
+        been exhausted.
     """
 
     DEFAULT_METHOD_WHITELIST = frozenset([
@@ -112,7 +123,8 @@ class Retry(object):
 
     def __init__(self, total=10, connect=None, read=None, redirect=None,
                  method_whitelist=DEFAULT_METHOD_WHITELIST, status_forcelist=None,
-                 backoff_factor=0, raise_on_redirect=True, _observed_errors=0):
+                 backoff_factor=0, raise_on_redirect=True, raise_on_status=True,
+                 _observed_errors=0):
 
         self.total = total
         self.connect = connect
@@ -127,6 +139,7 @@ class Retry(object):
         self.method_whitelist = method_whitelist
         self.backoff_factor = backoff_factor
         self.raise_on_redirect = raise_on_redirect
+        self.raise_on_status = raise_on_status
         self._observed_errors = _observed_errors  # TODO: use .history instead?
 
     def new(self, **kw):
@@ -137,6 +150,7 @@ class Retry(object):
             status_forcelist=self.status_forcelist,
             backoff_factor=self.backoff_factor,
             raise_on_redirect=self.raise_on_redirect,
+            raise_on_status=self.raise_on_status,
             _observed_errors=self._observed_errors,
         )
         params.update(kw)
@@ -153,7 +167,7 @@ class Retry(object):
 
         redirect = bool(redirect) and None
         new_retries = cls(retries, redirect=redirect)
-        log.debug("Converted retries value: %r -> %r" % (retries, new_retries))
+        log.debug("Converted retries value: %r -> %r", retries, new_retries)
         return new_retries
 
     def get_backoff_time(self):
@@ -272,7 +286,7 @@ class Retry(object):
         if new_retry.is_exhausted():
             raise MaxRetryError(_pool, url, error or ResponseError(cause))
 
-        log.debug("Incremented Retry for (url='%s'): %r" % (url, new_retry))
+        log.debug("Incremented Retry for (url='%s'): %r", url, new_retry)
 
         return new_retry
 

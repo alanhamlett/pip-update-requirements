@@ -29,12 +29,13 @@ class FreezeCommand(Command):
 
         self.cmd_opts.add_option(
             '-r', '--requirement',
-            dest='requirement',
-            action='store',
-            default=None,
+            dest='requirements',
+            action='append',
+            default=[],
             metavar='file',
             help="Use the order in the given requirements file and its "
-                 "comments when generating output.")
+                 "comments when generating output. This option can be "
+                 "used multiple times.")
         self.cmd_opts.add_option(
             '-f', '--find-links',
             dest='find_links',
@@ -62,6 +63,11 @@ class FreezeCommand(Command):
             action='store_true',
             help='Do not skip these packages in the output:'
                  ' %s' % ', '.join(DEV_PKGS))
+        self.cmd_opts.add_option(
+            '--exclude-editable',
+            dest='exclude_editable',
+            action='store_true',
+            help='Exclude editable package from output.')
 
         self.parser.insert_option_group(0, self.cmd_opts)
 
@@ -73,14 +79,15 @@ class FreezeCommand(Command):
             skip.update(DEV_PKGS)
 
         freeze_kwargs = dict(
-            requirement=options.requirement,
+            requirement=options.requirements,
             find_links=options.find_links,
             local_only=options.local,
             user_only=options.user,
             skip_regex=options.skip_requirements_regex,
             isolated=options.isolated_mode,
             wheel_cache=wheel_cache,
-            skip=skip)
+            skip=skip,
+            exclude_editable=options.exclude_editable)
 
         for line in freeze(**freeze_kwargs):
             sys.stdout.write(line + '\n')

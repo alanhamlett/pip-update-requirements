@@ -117,6 +117,12 @@ class Command(object):
         else:
             level = "INFO"
 
+        # The root logger should match the "console" level *unless* we
+        # specified "--log" to send debug logs to a file.
+        root_level = level
+        if options.log:
+            root_level = "DEBUG"
+
         logging_dictConfig({
             "version": 1,
             "disable_existing_loggers": False,
@@ -155,7 +161,7 @@ class Command(object):
                 },
             },
             "root": {
-                "level": level,
+                "level": root_level,
                 "handlers": list(filter(None, [
                     "console",
                     "console_errors",
@@ -281,37 +287,37 @@ class RequirementCommand(Command):
                 )
             )
 
-        found_req_in_file = False
         for filename in options.requirements:
             for req in parse_requirements(
                     filename,
                     finder=finder, options=options, session=session,
                     wheel_cache=wheel_cache):
-                found_req_in_file = True
                 requirement_set.add_requirement(req)
         # If --require-hashes was a line in a requirements file, tell
         # RequirementSet about it:
         requirement_set.require_hashes = options.require_hashes
 
-        if not (args or options.editables or found_req_in_file):
+        if not (args or options.editables or options.requirements):
             opts = {'name': name}
             if options.find_links:
-                msg = ('You must give at least one requirement to '
-                       '%(name)s (maybe you meant "pip %(name)s '
-                       '%(links)s"?)' %
-                       dict(opts, links=' '.join(options.find_links)))
+                raise CommandError(
+                    'You must give at least one requirement to %(name)s '
+                    '(maybe you meant "pip %(name)s %(links)s"?)' %
+                    dict(opts, links=' '.join(options.find_links)))
             else:
-                msg = ('You must give at least one requirement '
-                       'to %(name)s (see "pip help %(name)s")' % opts)
-            logger.warning(msg)
+                raise CommandError(
+                    'You must give at least one requirement to %(name)s '
+                    '(see "pip help %(name)s")' % opts)
 
-    def _build_package_finder(self, options, session):
+    def _build_package_finder(self, options, session,
+                              platform=None, python_versions=None,
+                              abi=None, implementation=None):
         """
         Create a package finder appropriate to this requirement command.
         """
         index_urls = [options.index_url] + options.extra_index_urls
         if options.no_index:
-            logger.info('Ignoring indexes: %s', ','.join(index_urls))
+            logger.debug('Ignoring indexes: %s', ','.join(index_urls))
             index_urls = []
 
         return PackageFinder(
@@ -322,4 +328,8 @@ class RequirementCommand(Command):
             allow_all_prereleases=options.pre,
             process_dependency_links=options.process_dependency_links,
             session=session,
+            platform=platform,
+            versions=python_versions,
+            abi=abi,
+            implementation=implementation,
         )

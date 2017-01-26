@@ -100,6 +100,7 @@ def pur(**options):
         raise ExitCodeException(10)
 
 
+UPDATED = 0
 def update_requirements(filename, output_filename, options):
     """Update a requirements file.
 
@@ -263,23 +264,24 @@ def current_version(req):
     lt_ver = None
     lte_ver = None
     not_ver = None
-    for spec in req.req.specs:
-        ver = Version(spec[1])
-        if spec[0] == '==':
+    for spec in req.req.specifier:
+        operator, version = spec._spec
+        ver = Version(version)
+        if operator == '==':
             eq_ver = ver
-        elif spec[0] == '>':
+        elif operator == '>':
             if not gt_ver or ver > gt_ver:
                 gt_ver = ver
-        elif spec[0] == '>=':
+        elif operator == '>=':
             if not gte_ver or ver > gte_ver:
                 gte_ver = ver
-        elif spec[0] == '<':
+        elif operator == '<':
             if not lt_ver or ver < lt_ver:
                 lt_ver = ver
-        elif spec[0] == '<=':
+        elif operator == '<=':
             if not lte_ver or ver < lte_ver:
                 lte_ver = ver
-        elif spec[0] == '!=':
+        elif operator == '!=':
             not_ver = ver
 
     found = (eq_ver is not None or gt_ver is not None or gte_ver is not None or
