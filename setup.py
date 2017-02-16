@@ -28,13 +28,12 @@ setup(
     entry_points={
         'console_scripts': ['pur = pur.__init__:pur'],
     },
-    classifiers=(
+    classifiers=[
         'Development Status :: 5 - Production/Stable',
         'Environment :: Console',
         'Intended Audience :: Developers',
         'License :: OSI Approved :: BSD License',
         'Natural Language :: English',
-        'Topic :: Software Development :: Build Tools',
         'Programming Language :: Python',
         'Programming Language :: Python :: 2',
         'Programming Language :: Python :: 2.6',
@@ -43,5 +42,7 @@ setup(
         'Programming Language :: Python :: 3.3',
         'Programming Language :: Python :: 3.4',
         'Programming Language :: Python :: 3.5',
-    ),
+        'Programming Language :: Python :: 3.6',
+        'Topic :: Software Development :: Build Tools',
+    ],
 )
