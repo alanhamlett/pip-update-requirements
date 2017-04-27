@@ -459,7 +459,6 @@ def ask_to_update(req, spec_ver, latest_ver):
     raise StopUpdating()
 
 
-
 def update_requirement(req, line, spec_ver, latest_ver):
     """Updates the version of a requirement line.
 
