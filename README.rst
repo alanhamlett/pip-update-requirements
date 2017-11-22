@@ -1,6 +1,3 @@
-pip-update-requirements
-=======================
-
 .. image:: https://travis-ci.org/alanhamlett/pip-update-requirements.svg?branch=master
     :target: https://travis-ci.org/alanhamlett/pip-update-requirements
     :alt: Tests
@@ -17,6 +14,9 @@ pip-update-requirements
     :target: https://pypi.python.org/pypi/pur
     :alt: Version
 
+
+pip-update-requirements
+=======================
 
 Update the packages in a ``requirements.txt`` file.
 
