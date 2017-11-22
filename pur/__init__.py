@@ -21,7 +21,7 @@ except ImportError:  # pragma: nocover
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 'packages'))
 try:
-    from pip.download import PipSession
+    from pip._internal.download import PipSession
 except (TypeError, ImportError):  # pragma: nocover
     # on Windows, non-ASCII characters in import path can be fixed using
     # the script path from sys.argv[0].
@@ -29,15 +29,15 @@ except (TypeError, ImportError):  # pragma: nocover
     sys.path.insert(0,
                     os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])),
                                  'packages'))
-    from pip.download import PipSession
+    from pip._internal.download import PipSession
 
 
-from pip.download import get_file_content
-from pip.exceptions import InstallationError
-from pip.index import PackageFinder
-from pip.models.index import PyPI
-from pip.req import req_file
-from pip.req.req_install import Version
+from pip._internal.download import get_file_content
+from pip._internal.exceptions import InstallationError
+from pip._internal.index import PackageFinder
+from pip._internal.models.index import PyPI
+from pip._internal.req import req_file
+from pip._internal.req.req_install import Version
 from pip._vendor.packaging.version import InvalidVersion
 
 from .__about__ import __version__
@@ -102,6 +102,8 @@ def pur(**options):
 
 
 UPDATED = 0
+
+
 def update_requirements(filename, output_filename, options):
     """Update a requirements file.
 
@@ -124,9 +126,7 @@ def update_requirements(filename, output_filename, options):
         stop = False
         for line, req, spec_ver, latest_ver in requirements:
 
-            if (not stop and req and req.name.lower() not in options['skip']
-                    and (len(options['only']) == 0 or
-                         req.name.lower() in options['only'])):
+            if (not stop and req and req.name.lower() not in options['skip'] and (len(options['only']) == 0 or req.name.lower() in options['only'])):
 
                 try:
                     if should_update(req, spec_ver, latest_ver,
@@ -191,6 +191,7 @@ def patch_pip(options):
 
     global UPDATED
     seen = []
+
     def patched_parse_requirements(*args, **kwargs):
         global UPDATED
         if not options['no_recursive']:
@@ -499,5 +500,6 @@ def echo(msg, dry_run=False, **kwargs):
 class ExitCodeException(click.ClickException):
     def __init__(self, exit_code):
         self.exit_code = exit_code
+
     def show(self):
         pass
