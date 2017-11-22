@@ -3,7 +3,7 @@ History
 -------
 
 
-4.0.3 (unreleased)
+4.0.3 (2017-11-21)
 ++++++++++++++++++
 
 - Upgrade pip to
