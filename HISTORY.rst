@@ -3,6 +3,17 @@ History
 -------
 
 
+4.0.3 (unreleased)
+++++++++++++++++++
+
+- Upgrade pip to
+  `8ed4ac1fe6e2a05db41585c10a7b46f16bc60666 <https://github.com/pypa/pip/tree/8ed4ac1fe6e2a05db41585c10a7b46f16bc60666>`_
+  to fix NamespacePath sort attribute error.
+  `#16 <https://github.com/alanhamlett/pip-update-requirements/issues/16>`_
+- Drop support for Python 2.6.
+  `#pypa/pip#4343 <https://github.com/pypa/pip/pull/4343>`_
+
+
 4.0.2 (2017-02-16)
 ++++++++++++++++++
 
@@ -12,28 +23,33 @@ History
 4.0.1 (2017-01-26)
 ++++++++++++++++++
 
-- Catch InvalidVersion and skip the requirement without modifying. #15
+- Catch InvalidVersion and skip the requirement without modifying.
+  `#15 <https://github.com/alanhamlett/pip-update-requirements/issues/15>`_
 - Upgrade packaged pip to 9.1.0.dev0.
 
 
 4.0.0 (2016-09-13)
 ++++++++++++++++++
 
-- Now updates packages in nested requirements files. #14
+- Now updates packages in nested requirements files.
+  `#14 <https://github.com/alanhamlett/pip-update-requirements/issues/14>`_
 - New --no-recursive option to prevent updating nested requirements files.
 
 
 3.0.7 (2016-09-10)
 ++++++++++++++++++
 
-- New --interactive option to prompt before updating each package. #12
-- New --only option to only update specified packages. #13
+- New --interactive option to prompt before updating each package.
+  `#12 <https://github.com/alanhamlett/pip-update-requirements/issues/12>`_
+- New --only option to only update specified packages.
+  `#13 <https://github.com/alanhamlett/pip-update-requirements/issues/13>`_
 
 
 3.0.6 (2016-09-07)
 ++++++++++++++++++
 
-- Add ability to resolve packages in alternate pypi urls. #11
+- Add ability to resolve packages in alternate pypi urls.
+  `#11 <https://github.com/alanhamlett/pip-update-requirements/issues/11>`_
 
 
 3.0.5 (2016-05-13)
