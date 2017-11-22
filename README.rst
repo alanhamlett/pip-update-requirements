@@ -13,6 +13,10 @@ pip-update-requirements
     :target: https://gemnasium.com/github.com/alanhamlett/pip-update-requirements
     :alt: Dependencies
 
+.. image:: https://badge.fury.io/py/pur.svg
+    :target: https://pypi.python.org/pypi/pur
+    :alt: Version
+
 
 Update the packages in a ``requirements.txt`` file.
 
