@@ -12,6 +12,7 @@ import click
 import os
 import re
 import sys
+from click import echo as _echo
 from collections import defaultdict
 try:
     from StringIO import StringIO
@@ -106,7 +107,8 @@ def pur(**options):
         echo=options['echo'],
     )
 
-    _echo('All requirements up-to-date.', dry_run=options['dry_run'])
+    if not options['dry_run']:
+        _echo('All requirements up-to-date.')
 
     if options['nonzero_exit_code']:
         if UPDATED > 0:
@@ -186,8 +188,8 @@ def update_requirements(input_file=None, output_file=None, force=False,
                             'updated': was_updated,
                             'message': msg,
                         })
-                        if echo:
-                            _echo(msg, dry_run=dry_run)
+                        if echo and not dry_run:
+                            _echo(msg)
 
                     else:
                         buf.write(line)
@@ -544,11 +546,6 @@ def update_requirement(req, line, spec_ver, latest_ver):
         spec_part=spec_part.replace(old, new, 1),
     )
     return new_line
-
-
-def _echo(msg, dry_run=False):
-    if not dry_run:
-        click.echo(msg)
 
 
 class ExitCodeException(click.ClickException):
