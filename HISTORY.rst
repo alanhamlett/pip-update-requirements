@@ -3,6 +3,14 @@ History
 -------
 
 
+5.0.0 (2018-05-28)
+++++++++++++++++++
+
+- Ability to use update_requirements directly from Python.
+  `#17 <https://github.com/alanhamlett/pip-update-requirements/issues/17>`_
+- Write nested requirements to output file unless --no-recursive is present.
+
+
 4.0.3 (2017-11-21)
 ++++++++++++++++++
 
