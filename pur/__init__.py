@@ -12,6 +12,7 @@ import click
 import os
 import re
 import sys
+from collections import defaultdict
 try:
     from StringIO import StringIO
 except ImportError:  # pragma: nocover
@@ -84,16 +85,28 @@ def pur(**options):
     except AttributeError:
         options['only'] = set()
 
+    options['echo'] = True
+
     global UPDATED
     UPDATED = 0
 
     # patch pip for handling nested requirements files
     patch_pip(options)
 
-    output_filename = options['output'] or options['requirement']
-    update_requirements(options['requirement'], output_filename, options)
+    output_file = options['output'] or options['requirement']
+    update_requirements(
+        input_file=options['requirement'],
+        output_file=output_file,
+        force=options['force'],
+        interactive=options['interactive'],
+        skip=options['skip'],
+        only=options['only'],
+        dry_run=options['dry_run'],
+        no_recursive=options['no_recursive'],
+        echo=options['echo'],
+    )
 
-    echo('All requirements up-to-date.', **options)
+    _echo('All requirements up-to-date.', dry_run=options['dry_run'])
 
     if options['nonzero_exit_code']:
         if UPDATED > 0:
@@ -104,34 +117,44 @@ def pur(**options):
 UPDATED = 0
 
 
-def update_requirements(filename, output_filename, options):
+def update_requirements(input_file=None, output_file=None, force=False,
+                        interactive=False, skip=[], only=[], dry_run=False,
+                        no_recursive=False, echo=False):
     """Update a requirements file.
 
-    Returns the number of updated packages as an int.
+    Returns a dict of package update info.
 
-    :param filename:        Path to a requirements.txt file.
-    :param output_filename: Path to the output requirements.txt file.
-    :param options:         Dict containing original command line arguments.
+    :param input_file:   Path to a requirements.txt file.
+    :param output_file:  Path to the output requirements.txt file.
+    :param force:        Force updating packages even when a package has no
+                         version specified in the input requirements.txt file.
+    :param interactive:  Interactively prompts before updating each package.
+    :param dry_run:      Output changes to STDOUT instead of overwriting the
+                         requirements.txt file.
+    :param no_recursive: Prevents updating nested requirements files.
+    :param skip:         Comma separated list of packages to skip updating.
+    :param only:         Comma separated list of packages. Only these packages
+                         will be updated.
     """
 
     global UPDATED
 
     updated = 0
     buf = StringIO()
+    updates = defaultdict(list)
 
     try:
-        requirements = get_requirements_and_latest(filename,
-                                                   force=options['force'])
+        requirements = get_requirements_and_latest(input_file, force=force)
 
         stop = False
         for line, req, spec_ver, latest_ver in requirements:
 
-            if (not stop and req and req.name.lower() not in options['skip'] and (len(options['only']) == 0 or req.name.lower() in options['only'])):
+            if not stop and can_check_version(req, skip, only):
 
                 try:
                     if should_update(req, spec_ver, latest_ver,
-                                    force=options['force'],
-                                    interactive=options['interactive']):
+                                    force=force,
+                                    interactive=interactive):
 
                         if not spec_ver[0]:
                             new_line = '{0}=={1}'.format(line, latest_ver)
@@ -141,21 +164,30 @@ def update_requirements(filename, output_filename, options):
                         buf.write(new_line)
 
                         if new_line != line:
-                            echo('Updated {package}: {old} -> {new}'.format(
+                            msg = 'Updated {package}: {old} -> {new}'.format(
                                 package=req.name,
                                 old=old_version(spec_ver),
                                 new=latest_ver,
-                            ), **options)
+                            )
                             updated += 1
+                            was_updated = True
                         else:
-                            msg = ('New version for {package} found ({new}), ' +
-                                   'but current spec prohibits updating: ' +
-                                   '{line}')
-                            echo(msg.format(
-                                package=req.name,
-                                new=latest_ver,
-                                line=line,
-                            ), **options)
+                            msg = 'New version for {package} found ({new}), ' \
+                                  'but current spec prohibits updating: ' \
+                                  '{line}'.format(package=req.name,
+                                                  new=latest_ver,
+                                                  line=line)
+                            was_updated = False
+
+                        updates[req.name].append({
+                            'package': req.name,
+                            'current': old_version(spec_ver),
+                            'latest': latest_ver,
+                            'updated': was_updated,
+                            'message': msg,
+                        })
+                        if echo:
+                            _echo(msg, dry_run=dry_run)
 
                     else:
                         buf.write(line)
@@ -171,16 +203,18 @@ def update_requirements(filename, output_filename, options):
     except InstallationError as e:
         raise click.ClickException(str(e))
 
-    if not options['dry_run']:
-        with open(output_filename, 'w') as output:
+    if not dry_run:
+        with open(output_file, 'w') as output:
             output.write(buf.getvalue())
-    else:
-        echo('==> ' + output_filename + ' <==')
-        echo(buf.getvalue())
+    elif echo:
+        _echo('==> ' + output_file + ' <==')
+        _echo(buf.getvalue())
 
     buf.close()
 
     UPDATED += updated
+
+    return updates
 
 
 def patch_pip(options):
@@ -199,7 +233,17 @@ def patch_pip(options):
             if not options['output'] and filename not in seen:
                 if os.path.isfile(filename):
                     seen.append(filename)
-                    update_requirements(filename, filename, options)
+                    update_requirements(
+                        input_file=filename,
+                        output_file=filename,
+                        force=options['force'],
+                        interactive=options['interactive'],
+                        skip=options['skip'],
+                        only=options['only'],
+                        dry_run=options['dry_run'],
+                        no_recursive=options['no_recursive'],
+                        echo=options['echo'],
+                    )
         return []
     req_file.parse_requirements = patched_parse_requirements
 
@@ -388,6 +432,16 @@ def latest_version(req, session, finder, include_prereleases=False):
     return remote_version
 
 
+def can_check_version(req, skip, only):
+    if not req:
+        return False
+
+    if req.name.lower() in skip:
+        return False
+
+    return len(only) == 0 or req.name.lower() in only
+
+
 def should_update(req, spec_ver, latest_ver, force=False, interactive=False):
     """Returns True if this requirement should be updated, False otherwise.
 
@@ -449,7 +503,7 @@ def ask_to_update(req, spec_ver, latest_ver):
         value = value.lower()
         if value in choices:
             break
-        echo('Please enter either {0}.'.format(', '.join(choices)))
+        _echo('Please enter either {0}.'.format(', '.join(choices)))
 
     if value == 'y':
         return True
@@ -492,7 +546,7 @@ def update_requirement(req, line, spec_ver, latest_ver):
     return new_line
 
 
-def echo(msg, dry_run=False, **kwargs):
+def _echo(msg, dry_run=False):
     if not dry_run:
         click.echo(msg)
 
