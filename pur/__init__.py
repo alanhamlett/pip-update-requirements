@@ -46,6 +46,9 @@ from .__about__ import __version__
 from .exceptions import StopUpdating
 
 
+PUR_GLOBAL_UPDATED = 0
+
+
 @click.command()
 @click.option('-r', '--requirement', type=click.Path(),
               help='The requirements.txt file to update; Defaults to using ' +
@@ -88,16 +91,12 @@ def pur(**options):
 
     options['echo'] = True
 
-    global UPDATED
-    UPDATED = 0
+    global PUR_GLOBAL_UPDATED
+    PUR_GLOBAL_UPDATED = 0
 
-    # patch pip for handling nested requirements files
-    patch_pip(options)
-
-    output_file = options['output'] or options['requirement']
     update_requirements(
         input_file=options['requirement'],
-        output_file=output_file,
+        output_file=options['output'],
         force=options['force'],
         interactive=options['interactive'],
         skip=options['skip'],
@@ -111,12 +110,9 @@ def pur(**options):
         _echo('All requirements up-to-date.')
 
     if options['nonzero_exit_code']:
-        if UPDATED > 0:
+        if PUR_GLOBAL_UPDATED > 0:
             raise ExitCodeException(11)
         raise ExitCodeException(10)
-
-
-UPDATED = 0
 
 
 def update_requirements(input_file=None, output_file=None, force=False,
@@ -139,11 +135,42 @@ def update_requirements(input_file=None, output_file=None, force=False,
                          will be updated.
     """
 
-    global UPDATED
+    obuffer = StringIO()
+    updates = defaultdict(list)
+
+    # patch pip for handling nested requirements files
+    patch_pip(obuffer, updates, input_file=input_file, output_file=output_file,
+              force=force, interactive=interactive, skip=skip, only=only,
+              dry_run=dry_run, no_recursive=no_recursive, echo=echo)
+
+    _internal_update_requirements(obuffer, updates,
+                                  input_file=input_file,
+                                  output_file=output_file,
+                                  force=force,
+                                  interactive=interactive, skip=skip,
+                                  only=only, dry_run=dry_run,
+                                  no_recursive=no_recursive,
+                                  echo=echo)
+
+    if not dry_run:
+        if not output_file:
+            output_file = input_file
+        with open(output_file, 'w') as output:
+            output.write(obuffer.getvalue())
+
+    obuffer.close()
+
+    return updates
+
+
+def _internal_update_requirements(obuffer, updates, input_file=None,
+                                  output_file=None, force=False,
+                                  interactive=False, skip=[], only=[],
+                                  dry_run=False, no_recursive=False,
+                                  echo=False):
+    global PUR_GLOBAL_UPDATED
 
     updated = 0
-    buf = StringIO()
-    updates = defaultdict(list)
 
     try:
         requirements = get_requirements_and_latest(input_file, force=force)
@@ -155,15 +182,16 @@ def update_requirements(input_file=None, output_file=None, force=False,
 
                 try:
                     if should_update(req, spec_ver, latest_ver,
-                                    force=force,
-                                    interactive=interactive):
+                                     force=force,
+                                     interactive=interactive):
 
                         if not spec_ver[0]:
                             new_line = '{0}=={1}'.format(line, latest_ver)
                         else:
-                            new_line = update_requirement(req, line, spec_ver,
-                                                        latest_ver)
-                        buf.write(new_line)
+                            new_line = update_requirement_line(req, line,
+                                                               spec_ver,
+                                                               latest_ver)
+                        obuffer.write(new_line)
 
                         if new_line != line:
                             msg = 'Updated {package}: {old} -> {new}'.format(
@@ -192,52 +220,48 @@ def update_requirements(input_file=None, output_file=None, force=False,
                             _echo(msg)
 
                     else:
-                        buf.write(line)
+                        obuffer.write(line)
                 except StopUpdating:
                     stop = True
-                    buf.write(line)
+                    obuffer.write(line)
 
-            else:
-                buf.write(line)
+            elif not output_file or not requirements_line(line, req):
+                obuffer.write(line)
 
-            buf.write("\n")
+            if not output_file or not requirements_line(line, req):
+                obuffer.write('\n')
 
     except InstallationError as e:
         raise click.ClickException(str(e))
 
-    if not dry_run:
-        with open(output_file, 'w') as output:
-            output.write(buf.getvalue())
-    elif echo:
-        _echo('==> ' + output_file + ' <==')
-        _echo(buf.getvalue())
+    if dry_run and echo:
+        _echo('==> ' + (output_file or input_file) + ' <==')
+        _echo(obuffer.getvalue())
 
-    buf.close()
-
-    UPDATED += updated
-
-    return updates
+    PUR_GLOBAL_UPDATED += updated
 
 
-def patch_pip(options):
+def patch_pip(obuffer, updates, **options):
     """Patch pip to also update nested requirements files.
 
+    :param obuffer:  Output buffer for new requirements file.
+    :param updates:  Dict for saving information about updated packages.
     :param options:  Dict containing original command line arguments.
     """
 
-    global UPDATED
     seen = []
 
     def patched_parse_requirements(*args, **kwargs):
-        global UPDATED
         if not options['no_recursive']:
             filename = args[0]
-            if not options['output'] and filename not in seen:
+            if filename not in seen:
                 if os.path.isfile(filename):
                     seen.append(filename)
-                    update_requirements(
+                    buf = StringIO()
+                    _internal_update_requirements(
+                        buf, updates,
                         input_file=filename,
-                        output_file=filename,
+                        output_file=options['output_file'],
                         force=options['force'],
                         interactive=options['interactive'],
                         skip=options['skip'],
@@ -246,6 +270,13 @@ def patch_pip(options):
                         no_recursive=options['no_recursive'],
                         echo=options['echo'],
                     )
+                    if not options['dry_run']:
+                        if options['output_file']:
+                            obuffer.write(buf.getvalue())
+                        else:
+                            with open(filename, 'w') as output:
+                                output.write(buf.getvalue())
+                    buf.close()
         return []
     req_file.parse_requirements = patched_parse_requirements
 
@@ -391,7 +422,7 @@ def join_lines(lines_enum):
                 new_line.append(line)
                 orig_lines.append(orig_line)
                 yield (primary_line_number, ''.join(new_line),
-                       "\n".join(orig_lines))
+                       '\n'.join(orig_lines))
                 new_line = []
                 orig_lines = []
             else:
@@ -404,7 +435,7 @@ def join_lines(lines_enum):
 
     # last line contains \
     if new_line:
-        yield primary_line_number, ''.join(new_line), "\n".join(orig_lines)
+        yield primary_line_number, ''.join(new_line), '\n'.join(orig_lines)
 
 
 def latest_version(req, session, finder, include_prereleases=False):
@@ -516,7 +547,7 @@ def ask_to_update(req, spec_ver, latest_ver):
     raise StopUpdating()
 
 
-def update_requirement(req, line, spec_ver, latest_ver):
+def update_requirement_line(req, line, spec_ver, latest_ver):
     """Updates the version of a requirement line.
 
     Returns a new requirement line with the package version updated.
@@ -546,6 +577,10 @@ def update_requirement(req, line, spec_ver, latest_ver):
         spec_part=spec_part.replace(old, new, 1),
     )
     return new_line
+
+
+def requirements_line(line, req):
+    return not req and line and line.strip().startswith('-r ')
 
 
 class ExitCodeException(click.ClickException):

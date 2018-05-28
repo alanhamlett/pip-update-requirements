@@ -4,19 +4,21 @@
 import os
 import shutil
 import tempfile
-from click.testing import CliRunner
-from pip._internal.index import InstallationCandidate, Link, PackageFinder
 
 from pur import pur, __version__
+
+from click.testing import CliRunner
+from pip._internal.index import InstallationCandidate, Link, PackageFinder
 
 from . import utils
 from .utils import u
 
 
-class BaseTestCase(utils.TestCase):
+class PurTestCase(utils.TestCase):
 
     def setUp(self):
         self.runner = CliRunner()
+        self.maxDiff = None
 
     def test_help_contents(self):
         args = ['--help']
@@ -105,8 +107,10 @@ class BaseTestCase(utils.TestCase):
     def test_updates_package_to_output_file(self):
         tempdir = tempfile.mkdtemp()
         output = os.path.join(tempdir, 'output.txt')
-        requirements = open('tests/samples/requirements.txt').read()
-        args = ['-r', 'tests/samples/requirements.txt', '--output', output]
+        previous = open('tests/samples/requirements.txt').read()
+        requirements = os.path.join(tempdir, 'requirements.txt')
+        shutil.copy('tests/samples/requirements.txt', requirements)
+        args = ['-r', requirements, '--output', output]
 
         with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
             project = 'flask'
@@ -120,9 +124,12 @@ class BaseTestCase(utils.TestCase):
             expected_output = "Updated flask: 0.9 -> 0.10.1\nAll requirements up-to-date.\n"
             self.assertEquals(u(result.output), u(expected_output))
             self.assertEquals(result.exit_code, 0)
-            self.assertEquals(open('tests/samples/requirements.txt').read(), requirements)
+            self.assertEquals(open('tests/samples/requirements.txt').read(), previous)
+            expected_requirements = open('tests/samples/results/test_updates_package').read()
+            self.assertEquals(open(output).read(), expected_requirements)
 
-    def test_does_not_update_nested_requirements_to_output_file(self):
+    def test_updates_nested_requirements_to_output_file(self):
+        tempdir = tempfile.mkdtemp()
         tempdir = tempfile.mkdtemp()
         output = os.path.join(tempdir, 'output.txt')
         requirements = os.path.join(tempdir, 'requirements-with-nested-reqfile.txt')
@@ -130,6 +137,10 @@ class BaseTestCase(utils.TestCase):
         shutil.copy('tests/samples/requirements-with-nested-reqfile.txt', requirements)
         shutil.copy('tests/samples/requirements-nested.txt', requirements_nested)
         args = ['-r', requirements, '--output', output]
+
+        expected_output = "Updated readtime: 0.9 -> 0.10.1\nAll requirements up-to-date.\n"
+        expected_requirements = open('tests/samples/results/test_updates_package_in_nested_requirements').read()
+        expected_requirements = expected_requirements.replace('-r requirements-nested.txt\n', open('tests/samples/results/test_updates_package_in_nested_requirements_nested').read())
 
         with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
             project = 'readtime'
@@ -140,15 +151,10 @@ class BaseTestCase(utils.TestCase):
 
             result = self.runner.invoke(pur, args)
             self.assertIsNone(result.exception)
-            expected_output = "All requirements up-to-date.\n"
             self.assertEquals(u(result.output), u(expected_output))
             self.assertEquals(result.exit_code, 0)
-
-            expected_requirements = open('tests/samples/requirements-with-nested-reqfile.txt').read()
-            self.assertEquals(open(requirements).read(), expected_requirements)
-            expected_requirements = open('tests/samples/requirements-nested.txt').read()
-            self.assertEquals(open(requirements_nested).read(), expected_requirements)
-            expected_requirements = open('tests/samples/results/test_updates_package_in_nested_requirements').read()
+            self.assertEquals(open(requirements_nested).read(), open('tests/samples/requirements-nested.txt').read())
+            self.assertEquals(open(requirements).read(), open('tests/samples/requirements-with-nested-reqfile.txt').read())
             self.assertEquals(open(output).read(), expected_requirements)
 
     def test_exit_code_from_no_updates(self):
