@@ -6,13 +6,13 @@
     :target: https://coveralls.io/github/alanhamlett/pip-update-requirements?branch=master
     :alt: Coverage
 
-.. image:: https://gemnasium.com/badges/github.com/alanhamlett/pip-update-requirements.svg
-    :target: https://gemnasium.com/github.com/alanhamlett/pip-update-requirements
-    :alt: Dependencies
-
-.. image:: https://badge.fury.io/py/pur.svg
+.. image:: https://img.shields.io/pypi/v/pur.svg
     :target: https://pypi.python.org/pypi/pur
     :alt: Version
+
+.. image:: https://img.shields.io/pypi/pyversions/pur.svg
+    :target: https://pypi.python.org/pypi/pur
+    :alt: Supported Python Versions
 
 
 pip-update-requirements
