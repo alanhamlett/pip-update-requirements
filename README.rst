@@ -47,14 +47,26 @@ For example, given a ``requirements.txt`` file::
 Running pur on that file updates the packages to current latest versions::
 
     $ pur -r requirements.txt
-    Updated flask: 0.9 -> 0.10.1
-    Updated sqlalchemy: 0.9.10 -> 1.0.12
-    Updated alembic: 0.8.4 -> 0.8.6
+    Updated flask: 0.9 -> 1.0.2
+    Updated sqlalchemy: 0.9.10 -> 1.2.8
+    Updated alembic: 0.8.4 -> 0.9.9
     All requirements up-to-date.
 
 
 Pur never modifies your environment or installed packages, it only modifies
 your ``requirements.txt`` file.
+
+You can also use Pur directly from Python::
+
+    $ python
+    Python 3.6.1
+    >>> from pur import update_requirements
+    >>> print([x[0]['message'] for x in update_requirements(input_file='requirements.txt').values()])
+    ['Updated flask: 0.9 -> 1.0.2', 'Updated sqlalchemy: 0.9.10 -> 1.2.8', 'Updated alembic: 0.8.4 -> 0.9.9']
+    >>> print(open('requirements.txt').read())
+    flask==1.0.2
+    sqlalchemy==1.2.8
+    alembic==0.9.9
 
 
 Options
