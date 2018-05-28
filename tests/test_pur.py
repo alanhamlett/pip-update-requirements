@@ -5,10 +5,11 @@ import os
 import shutil
 import tempfile
 
-from pur import pur, __version__
+from pur import pur, update_requirements, __version__
 
 from click.testing import CliRunner
 from pip._internal.index import InstallationCandidate, Link, PackageFinder
+from pip._internal.req.req_install import Version
 
 from . import utils
 from .utils import u
@@ -58,6 +59,33 @@ class PurTestCase(utils.TestCase):
             expected_requirements = open('tests/samples/results/test_updates_package').read()
             self.assertEquals(open(requirements).read(), expected_requirements)
 
+    def test_updates_package_without_command_line(self):
+        tempdir = tempfile.mkdtemp()
+        requirements = os.path.join(tempdir, 'requirements.txt')
+        shutil.copy('tests/samples/requirements.txt', requirements)
+        args = {
+            'input_file': requirements,
+        }
+        expected_result = {
+            'current': Version('0.9'),
+            'updated': True,
+            'latest': Version('0.10.1'),
+            'message': 'Updated flask: 0.9 -> 0.10.1',
+            'package': 'flask',
+        }
+
+        with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+            project = 'flask'
+            version = '0.10.1'
+            link = Link('')
+            candidate = InstallationCandidate(project, version, link)
+            mock_find_all_candidates.return_value = [candidate]
+
+            result = update_requirements(**args)
+            expected_requirements = open('tests/samples/results/test_updates_package').read()
+            self.assertEquals(open(requirements).read(), expected_requirements)
+            self.assertEquals(result['flask'][0], expected_result)
+
     def test_updates_package_in_nested_requirements(self):
         tempdir = tempfile.mkdtemp()
         requirements = os.path.join(tempdir, 'requirements-with-nested-reqfile.txt')
@@ -82,6 +110,37 @@ class PurTestCase(utils.TestCase):
             self.assertEquals(open(requirements).read(), expected_requirements)
             expected_requirements = open('tests/samples/results/test_updates_package_in_nested_requirements_nested').read()
             self.assertEquals(open(requirements_nested).read(), expected_requirements)
+
+    def test_updates_package_in_nested_requirements_without_command_line(self):
+        tempdir = tempfile.mkdtemp()
+        requirements = os.path.join(tempdir, 'requirements-with-nested-reqfile.txt')
+        requirements_nested = os.path.join(tempdir, 'requirements-nested.txt')
+        shutil.copy('tests/samples/requirements-with-nested-reqfile.txt', requirements)
+        shutil.copy('tests/samples/requirements-nested.txt', requirements_nested)
+        args = {
+            'input_file': requirements,
+        }
+        expected_result = {
+            'current': Version('0.9'),
+            'updated': True,
+            'latest': Version('0.10.1'),
+            'message': 'Updated readtime: 0.9 -> 0.10.1',
+            'package': 'readtime',
+        }
+        expected_requirements = open('tests/samples/results/test_updates_package_in_nested_requirements').read()
+        expected_requirements_nested = open('tests/samples/results/test_updates_package_in_nested_requirements_nested').read()
+
+        with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+            project = 'readtime'
+            version = '0.10.1'
+            link = Link('')
+            candidate = InstallationCandidate(project, version, link)
+            mock_find_all_candidates.return_value = [candidate]
+
+            result = update_requirements(**args)
+            self.assertEquals(open(requirements).read(), expected_requirements)
+            self.assertEquals(open(requirements_nested).read(), expected_requirements_nested)
+            self.assertEquals(result['readtime'][0], expected_result)
 
     def test_requirements_long_option_accepted(self):
         tempdir = tempfile.mkdtemp()
