@@ -1,0 +1,6 @@
+flask==0.9
+flask==12.1.3
+# an empty line below
+
+-e git://github.com/kennethreitz/inbox.py.git@551b4f44b144564504c687cebdb4c543cb8e9adf#egg=inbox
+flask

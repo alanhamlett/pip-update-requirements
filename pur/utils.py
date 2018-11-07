@@ -13,8 +13,7 @@ import re
 from click import echo as _echo
 
 from pip._internal.req import req_file
-from pip._internal.req.req_install import Version
-from pip._vendor.packaging.version import InvalidVersion
+from pip._vendor.packaging.version import InvalidVersion, Version
 
 from .exceptions import StopUpdating
 
@@ -40,7 +39,7 @@ def parse_requirement_line(line, filename, line_number, session, finder):
 def current_version(req):
     """Get the current version from an InstallRequirement instance.
 
-    Returns a tuple (found, eq_ver, gt_ver, gte_ver, lt_ver, lte_ver, not_ver).
+    Returns a tuple (ver, eq_ver, gt_ver, gte_ver, lt_ver, lte_ver, not_ver).
     The versions in the returned tuple will be either a
     pip.req.req_install.Version instance or None.
 
@@ -76,10 +75,8 @@ def current_version(req):
         elif operator == '!=':
             not_ver = ver
 
-    found = (eq_ver is not None or gt_ver is not None or gte_ver is not None or
-             lt_ver is not None or lte_ver is not None or not_ver is not None)
-
-    return found, eq_ver, gt_ver, gte_ver, lt_ver, lte_ver, not_ver
+    ver = eq_ver or gt_ver or gte_ver or lt_ver or lte_ver or not_ver
+    return ver, eq_ver, gt_ver, gte_ver, lt_ver, lte_ver, not_ver
 
 
 def old_version(spec_ver):
@@ -148,19 +145,33 @@ def join_lines(lines_enum):
         yield primary_line_number, ''.join(new_line), '\n'.join(orig_lines)
 
 
-def latest_version(req, session, finder, include_prereleases=False):
+def latest_version(req, spec_ver, session, finder, include_prereleases=True,
+                   minor=[], patch=[]):
     """Returns a Version instance with the latest version for the package.
 
     :param req:                 Instance of
                                 pip.req.req_install.InstallRequirement.
+    :param spec_ver:            Tuple of current versions from the requirements
+                                file.
     :param session:             Instance of pip.download.PipSession.
     :param finder:              Instance of pip.download.PackageFinder.
     :param include_prereleases: Include prereleased beta versions.
+    :param minor:               List of packages to only update minor and patch
+                                versions, never major.
+    :param patch:               List of packages to only update patch versions,
+                                never minor or major.
     """
     if not req:  # pragma: nocover
         return None
 
     all_candidates = finder.find_all_candidates(req.name)
+
+    if req.name.lower() in patch or '*' in patch:
+        all_candidates = [c for c in all_candidates
+                          if less_than(c.version, spec_ver[0], patch=True)]
+    elif req.name.lower() in minor or '*' in minor:
+        all_candidates = [c for c in all_candidates
+                          if less_than(c.version, spec_ver[0])]
 
     if not include_prereleases:
         all_candidates = [candidate for candidate in all_candidates
@@ -185,26 +196,32 @@ def can_check_version(req, skip, only):
     return len(only) == 0 or req.name.lower() in only
 
 
-def should_update(req, spec_ver, latest_ver, force=False, interactive=False):
+def should_update(req, spec_ver, latest_ver, force=False, minor=[],
+                  patch=[], interactive=False):
     """Returns True if this requirement should be updated, False otherwise.
 
-    :param req:         Instance of pip.req.req_install.InstallRequirement.
-    :param spec_ver:    Tuple of current versions from the requirements file.
-    :param latest_ver:  Latest version from pypi.
-    :param force:       Force getting latest version even for packages without
-                        a version specified.
+    :param req:          Instance of pip.req.req_install.InstallRequirement.
+    :param spec_ver:     Tuple of current versions from the requirements file.
+    :param latest_ver:   Latest version from pypi.
+    :param force:        Force getting latest version even for packages without
+                         a version specified.
+    :param interactive:  Interactively prompts before updating each package.
+    :param minor:        List of packages to only update minor and patch
+                         versions, never major.
+    :param patch:        List of packages to only update patch versions, never
+                         minor or major.
     """
 
     if latest_ver is None:
         return False
 
-    found = spec_ver[0]
+    ver = spec_ver[0]
     eq_ver = spec_ver[1]
     lt_ver = spec_ver[4]
     lte_ver = spec_ver[5]
     not_ver = spec_ver[6]
 
-    if not found and (not force or req.link is not None):
+    if not ver and (not force or req.link is not None):
         return False
 
     if eq_ver is not None and latest_ver <= eq_ver:
@@ -291,6 +308,34 @@ def update_requirement_line(req, line, spec_ver, latest_ver):
 
 def requirements_line(line, req):
     return not req and line and line.strip().startswith('-r ')
+
+
+def less_than(new_ver, old_ver, patch=False):
+    if old_ver is None:
+        return True
+    new_ver = str(new_ver).split('.')
+    old_ver = str(old_ver).split('.')
+    if old_ver[0] is None:
+        return True
+    new_major = int(new_ver[0] or 0)
+    old_major = int(old_ver[0] or 0)
+    if new_major > old_major:
+        return False
+    if patch:
+        if len(old_ver) == 1 or old_ver[1] is None:
+            return True
+        new_minor = int((new_ver[1] if len(new_ver) > 1 else 0) or 0)
+        old_minor = int((old_ver[1] if len(old_ver) > 1 else 0) or 0)
+        if new_minor > old_minor:
+            return False
+    return True
+
+
+def format_list_arg(options, key):
+    try:
+        options[key] = set(x.strip().lower() for x in options[key].split(','))
+    except AttributeError:
+        options[key] = set()
 
 
 class ExitCodeException(click.ClickException):

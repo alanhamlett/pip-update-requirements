@@ -43,7 +43,7 @@ from .exceptions import StopUpdating
 from .utils import (ExitCodeException, can_check_version, should_update,
                     old_version, requirements_line, update_requirement_line,
                     yield_lines, parse_requirement_line, current_version,
-                    latest_version)
+                    latest_version, format_list_arg)
 
 
 PUR_GLOBAL_UPDATED = 0
@@ -70,6 +70,13 @@ PUR_GLOBAL_UPDATED = 0
               'of packages to skip updating.')
 @click.option('--only', type=click.STRING, help='Comma separated list of ' +
               'packages. Only these packages will be updated.')
+@click.option('-m', '--minor', type=click.STRING, help='Comma separated ' +
+              'list of packages to only update minor versions, never major. ' +
+              'Use "*" to limit every package to minor version updates.')
+@click.option('-p', '--patch', type=click.STRING, help='Comma separated ' +
+              'list of packages to only update patch versions, never major '+
+              'or minor. Use "*" to limit every package to patch version ' +
+              'updates.')
 @click.option('-z', '--nonzero-exit-code', is_flag=True, default=False,
               help='Exit with status l0 when all packages up-to-date, 11 ' +
               'when some packages were updated. Defaults to exit status zero ' +
@@ -80,14 +87,11 @@ def pur(**options):
 
     if not options['requirement']:
         options['requirement'] = 'requirements.txt'
-    try:
-        options['skip'] = set(x.strip().lower() for x in options['skip'].split(','))
-    except AttributeError:
-        options['skip'] = set()
-    try:
-        options['only'] = set(x.strip().lower() for x in options['only'].split(','))
-    except AttributeError:
-        options['only'] = set()
+
+    format_list_arg(options, 'skip')
+    format_list_arg(options, 'only')
+    format_list_arg(options, 'minor')
+    format_list_arg(options, 'patch')
 
     options['echo'] = True
 
@@ -101,6 +105,8 @@ def pur(**options):
         interactive=options['interactive'],
         skip=options['skip'],
         only=options['only'],
+        minor=options['minor'],
+        patch=options['patch'],
         dry_run=options['dry_run'],
         no_recursive=options['no_recursive'],
         echo=options['echo'],
@@ -116,8 +122,9 @@ def pur(**options):
 
 
 def update_requirements(input_file=None, output_file=None, force=False,
-                        interactive=False, skip=[], only=[], dry_run=False,
-                        no_recursive=False, echo=False):
+                        interactive=False, skip=[], only=[], minor=[],
+                        patch=[], dry_run=False, no_recursive=False,
+                        echo=False):
     """Update a requirements file.
 
     Returns a dict of package update info.
@@ -130,9 +137,12 @@ def update_requirements(input_file=None, output_file=None, force=False,
     :param dry_run:      Output changes to STDOUT instead of overwriting the
                          requirements.txt file.
     :param no_recursive: Prevents updating nested requirements files.
-    :param skip:         Comma separated list of packages to skip updating.
-    :param only:         Comma separated list of packages. Only these packages
-                         will be updated.
+    :param skip:         List of packages to skip updating.
+    :param only:         List of packages to update, skipping all others.
+    :param minor:        List of packages to only update minor and patch
+                         versions, never major.
+    :param patch:        List of packages to only update patch versions, never
+                         minor or major.
     """
 
     obuffer = StringIO()
@@ -141,14 +151,19 @@ def update_requirements(input_file=None, output_file=None, force=False,
     # patch pip for handling nested requirements files
     _patch_pip(obuffer, updates, input_file=input_file, output_file=output_file,
               force=force, interactive=interactive, skip=skip, only=only,
-              dry_run=dry_run, no_recursive=no_recursive, echo=echo)
+              minor=minor, patch=patch, dry_run=dry_run,
+              no_recursive=no_recursive, echo=echo)
 
     _internal_update_requirements(obuffer, updates,
                                   input_file=input_file,
                                   output_file=output_file,
                                   force=force,
-                                  interactive=interactive, skip=skip,
-                                  only=only, dry_run=dry_run,
+                                  skip=skip,
+                                  only=only,
+                                  minor=minor,
+                                  patch=patch,
+                                  interactive=interactive,
+                                  dry_run=dry_run,
                                   no_recursive=no_recursive,
                                   echo=echo)
 
@@ -166,14 +181,15 @@ def update_requirements(input_file=None, output_file=None, force=False,
 def _internal_update_requirements(obuffer, updates, input_file=None,
                                   output_file=None, force=False,
                                   interactive=False, skip=[], only=[],
-                                  dry_run=False, no_recursive=False,
-                                  echo=False):
+                                  minor=[], patch=[], dry_run=False,
+                                  no_recursive=False, echo=False):
     global PUR_GLOBAL_UPDATED
 
     updated = 0
 
     try:
-        requirements = _get_requirements_and_latest(input_file, force=force)
+        requirements = _get_requirements_and_latest(input_file, force=force,
+                                                    minor=minor, patch=patch)
 
         stop = False
         for line, req, spec_ver, latest_ver in requirements:
@@ -181,8 +197,7 @@ def _internal_update_requirements(obuffer, updates, input_file=None,
             if not stop and can_check_version(req, skip, only):
 
                 try:
-                    if should_update(req, spec_ver, latest_ver,
-                                     force=force,
+                    if should_update(req, spec_ver, latest_ver, force=force,
                                      interactive=interactive):
 
                         if not spec_ver[0]:
@@ -266,6 +281,8 @@ def _patch_pip(obuffer, updates, **options):
                         interactive=options['interactive'],
                         skip=options['skip'],
                         only=options['only'],
+                        minor=options['minor'],
+                        patch=options['patch'],
                         dry_run=options['dry_run'],
                         no_recursive=options['no_recursive'],
                         echo=options['echo'],
@@ -281,7 +298,7 @@ def _patch_pip(obuffer, updates, **options):
     req_file.parse_requirements = patched_parse_requirements
 
 
-def _get_requirements_and_latest(filename, force=False):
+def _get_requirements_and_latest(filename, force=False, minor=[], patch=[]):
     """Parse a requirements file and get latest version for each requirement.
 
     Yields a tuple of (original line, InstallRequirement instance,
@@ -290,6 +307,10 @@ def _get_requirements_and_latest(filename, force=False):
     :param filename:  Path to a requirements.txt file.
     :param force:     Force getting latest version even for packages without
                       a version specified.
+    :param minor:     List of packages to only update minor and patch
+                      versions, never major.
+    :param patch:     List of packages to only update patch versions, never
+                      minor or major.
     """
     session = PipSession()
     finder = PackageFinder(
@@ -305,5 +326,6 @@ def _get_requirements_and_latest(filename, force=False):
             continue
         spec_ver = current_version(req)
         if spec_ver or force:
-            latest_ver = latest_version(req, session, finder)
+            latest_ver = latest_version(req, spec_ver, session, finder,
+                                        minor=minor, patch=patch)
             yield (orig_line, req, spec_ver, latest_ver)
