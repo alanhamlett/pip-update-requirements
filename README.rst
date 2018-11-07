@@ -87,6 +87,12 @@ Options
 -s, --skip TEXT          Comma separated list of packages to skip updating.
 --only TEXT              Comma separated list of packages. Only these
                          packages will be updated.
+-m, --minor TEXT         Comma separated list of packages to only update
+                         minor versions, never major. Use "*" to limit every
+                         package to minor version updates.
+-p, --patch TEXT         Comma separated list of packages to only update
+                         patch versions, never major or minor. Use "*" to
+                         limit every package to patch version updates.
 -z, --nonzero-exit-code  Exit with status l0 when all packages up-to-date,
                          11 when some packages were updated. Defaults to
                          exit status zero on success and non-zero on
