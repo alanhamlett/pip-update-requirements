@@ -3,6 +3,13 @@ History
 -------
 
 
+5.1.0 (2018-11-06)
+++++++++++++++++++
+
+- New --minor and --patch arguments.
+  `#20 <https://github.com/alanhamlett/pip-update-requirements/issues/20>`_
+
+
 5.0.0 (2018-05-28)
 ++++++++++++++++++
 
