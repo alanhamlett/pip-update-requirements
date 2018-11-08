@@ -145,21 +145,19 @@ def join_lines(lines_enum):
         yield primary_line_number, ''.join(new_line), '\n'.join(orig_lines)
 
 
-def latest_version(req, spec_ver, session, finder, include_prereleases=True,
-                   minor=[], patch=[]):
+def latest_version(req, spec_ver, session, finder, minor=[], patch=[], pre=[]):
     """Returns a Version instance with the latest version for the package.
 
-    :param req:                 Instance of
-                                pip.req.req_install.InstallRequirement.
-    :param spec_ver:            Tuple of current versions from the requirements
-                                file.
-    :param session:             Instance of pip.download.PipSession.
-    :param finder:              Instance of pip.download.PackageFinder.
-    :param include_prereleases: Include prereleased beta versions.
-    :param minor:               List of packages to only update minor and patch
-                                versions, never major.
-    :param patch:               List of packages to only update patch versions,
-                                never minor or major.
+    :param req:      Instance of pip.req.req_install.InstallRequirement.
+    :param spec_ver: Tuple of current versions from the requirements file.
+    :param session:  Instance of pip.download.PipSession.
+    :param finder:   Instance of pip.download.PackageFinder.
+    :param minor:    List of packages to only update minor and patch versions,
+                     never major.
+    :param patch:    List of packages to only update patch versions, never
+                     minor or major.
+    :param pre:      List of packages to allow updating to pre-release
+                     versions.
     """
     if not req:  # pragma: nocover
         return None
@@ -173,7 +171,7 @@ def latest_version(req, spec_ver, session, finder, include_prereleases=True,
         all_candidates = [c for c in all_candidates
                           if less_than(c.version, spec_ver[0])]
 
-    if not include_prereleases:
+    if req.name.lower() not in pre and '*' not in pre:
         all_candidates = [candidate for candidate in all_candidates
                           if not candidate.version.is_prerelease]
 
@@ -196,8 +194,7 @@ def can_check_version(req, skip, only):
     return len(only) == 0 or req.name.lower() in only
 
 
-def should_update(req, spec_ver, latest_ver, force=False, minor=[],
-                  patch=[], interactive=False):
+def should_update(req, spec_ver, latest_ver, force=False, interactive=False):
     """Returns True if this requirement should be updated, False otherwise.
 
     :param req:          Instance of pip.req.req_install.InstallRequirement.
@@ -206,10 +203,6 @@ def should_update(req, spec_ver, latest_ver, force=False, minor=[],
     :param force:        Force getting latest version even for packages without
                          a version specified.
     :param interactive:  Interactively prompts before updating each package.
-    :param minor:        List of packages to only update minor and patch
-                         versions, never major.
-    :param patch:        List of packages to only update patch versions, never
-                         minor or major.
     """
 
     if latest_ver is None:

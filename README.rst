@@ -93,6 +93,11 @@ Options
 -p, --patch TEXT         Comma separated list of packages to only update
                          patch versions, never major or minor. Use "*" to
                          limit every package to patch version updates.
+--pre TEXT               Comma separated list of packages to allow updating
+                         to pre-release versions. Use "*" to allow all
+                         packages to be updated to pre-release versions. By
+                         default packages are only updated to stable
+                         versions.
 -z, --nonzero-exit-code  Exit with status l0 when all packages up-to-date,
                          11 when some packages were updated. Defaults to
                          exit status zero on success and non-zero on

@@ -77,6 +77,11 @@ PUR_GLOBAL_UPDATED = 0
               'list of packages to only update patch versions, never major '+
               'or minor. Use "*" to limit every package to patch version ' +
               'updates.')
+@click.option('--pre', type=click.STRING, help='Comma separated ' +
+              'list of packages to allow updating to pre-release versions. ' +
+              'Use "*" to allow all packages to be updated to pre-release ' +
+              'versions. By default packages are only updated to stable ' +
+              'versions.')
 @click.option('-z', '--nonzero-exit-code', is_flag=True, default=False,
               help='Exit with status l0 when all packages up-to-date, 11 ' +
               'when some packages were updated. Defaults to exit status zero ' +
@@ -92,6 +97,7 @@ def pur(**options):
     format_list_arg(options, 'only')
     format_list_arg(options, 'minor')
     format_list_arg(options, 'patch')
+    format_list_arg(options, 'pre')
 
     options['echo'] = True
 
@@ -107,6 +113,7 @@ def pur(**options):
         only=options['only'],
         minor=options['minor'],
         patch=options['patch'],
+        pre=options['pre'],
         dry_run=options['dry_run'],
         no_recursive=options['no_recursive'],
         echo=options['echo'],
@@ -123,8 +130,8 @@ def pur(**options):
 
 def update_requirements(input_file=None, output_file=None, force=False,
                         interactive=False, skip=[], only=[], minor=[],
-                        patch=[], dry_run=False, no_recursive=False,
-                        echo=False):
+                        patch=[], pre=[], dry_run=False,
+                        no_recursive=False, echo=False):
     """Update a requirements file.
 
     Returns a dict of package update info.
@@ -143,6 +150,8 @@ def update_requirements(input_file=None, output_file=None, force=False,
                          versions, never major.
     :param patch:        List of packages to only update patch versions, never
                          minor or major.
+    :param pre:          List of packages to allow updating to pre-release
+                         versions.
     """
 
     obuffer = StringIO()
@@ -151,7 +160,7 @@ def update_requirements(input_file=None, output_file=None, force=False,
     # patch pip for handling nested requirements files
     _patch_pip(obuffer, updates, input_file=input_file, output_file=output_file,
               force=force, interactive=interactive, skip=skip, only=only,
-              minor=minor, patch=patch, dry_run=dry_run,
+              minor=minor, patch=patch, pre=pre, dry_run=dry_run,
               no_recursive=no_recursive, echo=echo)
 
     _internal_update_requirements(obuffer, updates,
@@ -162,6 +171,7 @@ def update_requirements(input_file=None, output_file=None, force=False,
                                   only=only,
                                   minor=minor,
                                   patch=patch,
+                                  pre=pre,
                                   interactive=interactive,
                                   dry_run=dry_run,
                                   no_recursive=no_recursive,
@@ -181,15 +191,17 @@ def update_requirements(input_file=None, output_file=None, force=False,
 def _internal_update_requirements(obuffer, updates, input_file=None,
                                   output_file=None, force=False,
                                   interactive=False, skip=[], only=[],
-                                  minor=[], patch=[], dry_run=False,
-                                  no_recursive=False, echo=False):
+                                  minor=[], patch=[], pre=[],
+                                  dry_run=False, no_recursive=False,
+                                  echo=False):
     global PUR_GLOBAL_UPDATED
 
     updated = 0
 
     try:
         requirements = _get_requirements_and_latest(input_file, force=force,
-                                                    minor=minor, patch=patch)
+                                                    minor=minor, patch=patch,
+                                                    pre=pre)
 
         stop = False
         for line, req, spec_ver, latest_ver in requirements:
@@ -283,6 +295,7 @@ def _patch_pip(obuffer, updates, **options):
                         only=options['only'],
                         minor=options['minor'],
                         patch=options['patch'],
+                        pre=options['pre'],
                         dry_run=options['dry_run'],
                         no_recursive=options['no_recursive'],
                         echo=options['echo'],
@@ -298,19 +311,22 @@ def _patch_pip(obuffer, updates, **options):
     req_file.parse_requirements = patched_parse_requirements
 
 
-def _get_requirements_and_latest(filename, force=False, minor=[], patch=[]):
+def _get_requirements_and_latest(filename, force=False, minor=[], patch=[],
+                                 pre=[]):
     """Parse a requirements file and get latest version for each requirement.
 
     Yields a tuple of (original line, InstallRequirement instance,
     spec_versions, latest_version).
 
-    :param filename:  Path to a requirements.txt file.
-    :param force:     Force getting latest version even for packages without
-                      a version specified.
-    :param minor:     List of packages to only update minor and patch
-                      versions, never major.
-    :param patch:     List of packages to only update patch versions, never
-                      minor or major.
+    :param filename: Path to a requirements.txt file.
+    :param force:    Force getting latest version even for packages without
+                     a version specified.
+    :param minor:    List of packages to only update minor and patch versions,
+                     never major.
+    :param patch:    List of packages to only update patch versions, never
+                     minor or major.
+    :param pre:      List of packages to allow updating to pre-release
+                     versions.
     """
     session = PipSession()
     finder = PackageFinder(
@@ -327,5 +343,5 @@ def _get_requirements_and_latest(filename, force=False, minor=[], patch=[]):
         spec_ver = current_version(req)
         if spec_ver or force:
             latest_ver = latest_version(req, spec_ver, session, finder,
-                                        minor=minor, patch=patch)
+                                        minor=minor, patch=patch, pre=pre)
             yield (orig_line, req, spec_ver, latest_ver)

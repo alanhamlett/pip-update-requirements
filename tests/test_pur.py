@@ -8,7 +8,7 @@ import tempfile
 from pur import pur, update_requirements, __version__
 
 from click.testing import CliRunner
-from pip._internal.index import InstallationCandidate, Link, PackageFinder
+from pip._internal.index import InstallationCandidate, PackageFinder, Link
 from pip._internal.req.req_install import Version
 
 from . import utils
@@ -454,6 +454,69 @@ class PurTestCase(utils.TestCase):
             self.assertEquals(u(result.output), u(expected_output))
             self.assertEquals(result.exit_code, 0)
             expected_requirements = open('tests/samples/requirements.txt').read()
+            self.assertEquals(open(requirements).read(), expected_requirements)
+
+    def test_only_stable_versions_selected(self):
+        tempdir = tempfile.mkdtemp()
+        requirements = os.path.join(tempdir, 'requirements.txt')
+        shutil.copy('tests/samples/requirements.txt', requirements)
+        args = ['-r', requirements]
+
+        with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+            project = 'flask'
+            version = '13.0.0.dev0'
+            link = Link('')
+            candidate = InstallationCandidate(project, version, link)
+            mock_find_all_candidates.return_value = [candidate]
+
+            result = self.runner.invoke(pur, args)
+            self.assertIsNone(result.exception)
+            expected_output = "All requirements up-to-date.\n"
+            self.assertEquals(u(result.output), u(expected_output))
+            self.assertEquals(result.exit_code, 0)
+            expected_requirements = open('tests/samples/requirements.txt').read()
+            self.assertEquals(open(requirements).read(), expected_requirements)
+
+    def test_pre_upgrades(self):
+        tempdir = tempfile.mkdtemp()
+        requirements = os.path.join(tempdir, 'requirements.txt')
+        shutil.copy('tests/samples/requirements.txt', requirements)
+        args = ['-r', requirements, '--pre', 'flask']
+
+        with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+            project = 'flask'
+            version = '13.0.0.dev0'
+            link = Link('')
+            candidate = InstallationCandidate(project, version, link)
+            mock_find_all_candidates.return_value = [candidate]
+
+            result = self.runner.invoke(pur, args)
+            self.assertIsNone(result.exception)
+            expected_output = "Updated flask: 0.9 -> 13.0.0.dev0\nUpdated flask: 12.0 -> 13.0.0.dev0\nAll requirements up-to-date.\n"
+            self.assertEquals(u(result.output), u(expected_output))
+            self.assertEquals(result.exit_code, 0)
+            expected_requirements = open('tests/samples/results/test_pre_release').read()
+            self.assertEquals(open(requirements).read(), expected_requirements)
+
+    def test_pre_upgrades_with_wildcard(self):
+        tempdir = tempfile.mkdtemp()
+        requirements = os.path.join(tempdir, 'requirements.txt')
+        shutil.copy('tests/samples/requirements.txt', requirements)
+        args = ['-r', requirements, '--pre', '*']
+
+        with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+            project = 'flask'
+            version = '13.0.0.dev0'
+            link = Link('')
+            candidate = InstallationCandidate(project, version, link)
+            mock_find_all_candidates.return_value = [candidate]
+
+            result = self.runner.invoke(pur, args)
+            self.assertIsNone(result.exception)
+            expected_output = "Updated flask: 0.9 -> 13.0.0.dev0\nUpdated flask: 12.0 -> 13.0.0.dev0\nAll requirements up-to-date.\n"
+            self.assertEquals(u(result.output), u(expected_output))
+            self.assertEquals(result.exit_code, 0)
+            expected_requirements = open('tests/samples/results/test_pre_release').read()
             self.assertEquals(open(requirements).read(), expected_requirements)
 
     def test_skip_multiple_packages(self):
