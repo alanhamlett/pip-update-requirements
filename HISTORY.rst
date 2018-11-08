@@ -3,6 +3,13 @@ History
 -------
 
 
+5.2.0 (2018-11-08)
+++++++++++++++++++
+
+- New --pre argument to allow upgrading to pre-release versions.
+  `#21 <https://github.com/alanhamlett/pip-update-requirements/issues/21>`_
+
+
 5.1.0 (2018-11-06)
 ++++++++++++++++++
 
