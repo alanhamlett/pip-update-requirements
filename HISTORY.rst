@@ -3,6 +3,14 @@ History
 -------
 
 
+5.2.1 (2018-11-13)
+++++++++++++++++++
+
+- Handle packages with non-numerical versions when upgrading and minor or patch
+  flags are present.
+  `#22 <https://github.com/alanhamlett/pip-update-requirements/issues/22>`_
+
+
 5.2.0 (2018-11-08)
 ++++++++++++++++++
 
