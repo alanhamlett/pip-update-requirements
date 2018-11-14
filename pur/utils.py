@@ -13,7 +13,7 @@ import re
 from click import echo as _echo
 
 from pip._internal.req import req_file
-from pip._vendor.packaging.version import InvalidVersion, Version
+from pip._vendor.packaging.version import parse, InvalidVersion, Version
 
 from .exceptions import StopUpdating
 
@@ -55,7 +55,7 @@ def current_version(req):
     for spec in req.req.specifier:
         operator, version = spec._spec
         try:
-            ver = Version(version)
+            ver = Version(version)  # TODO: use parse to support LegacyVersion
         except InvalidVersion:
             continue
         if operator == '==':
@@ -310,15 +310,15 @@ def less_than(new_ver, old_ver, patch=False):
     old_ver = str(old_ver).split('.')
     if old_ver[0] is None:
         return True
-    new_major = int(new_ver[0] or 0)
-    old_major = int(old_ver[0] or 0)
+    new_major = parse(new_ver[0] or 0)
+    old_major = parse(old_ver[0] or 0)
     if new_major > old_major:
         return False
     if patch:
         if len(old_ver) == 1 or old_ver[1] is None:
             return True
-        new_minor = int((new_ver[1] if len(new_ver) > 1 else 0) or 0)
-        old_minor = int((old_ver[1] if len(old_ver) > 1 else 0) or 0)
+        new_minor = parse('1.0.{}'.format((new_ver[1] if len(new_ver) > 1 else 0) or 0))
+        old_minor = parse('1.0.{}'.format((old_ver[1] if len(old_ver) > 1 else 0) or 0))
         if new_minor > old_minor:
             return False
     return True

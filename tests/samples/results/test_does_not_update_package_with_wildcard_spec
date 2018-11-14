@@ -1,2 +1,2 @@
 django==0.9.*
-flask==0.9
+flask==0.9.1
