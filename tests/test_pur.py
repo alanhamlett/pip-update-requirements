@@ -823,14 +823,14 @@ class PurTestCase(utils.TestCase):
         args = ['-r', tmpfile]
 
         with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
-            project = 'django'
+            project = 'fakewebserver'
             version = '1.8.13'
             link = Link('')
             candidate = InstallationCandidate(project, version, link)
             mock_find_all_candidates.return_value = [candidate]
 
             result = self.runner.invoke(pur, args)
-            expected_output = "Updated django: 1.8.6 -> 1.8.13\nNew version for django found (1.8.13), but current spec prohibits updating: django > 1.8.6, < 1.9\nAll requirements up-to-date.\n"
+            expected_output = "Updated fakewebserver: 1.8.6 -> 1.8.13\nNew version for fakewebserver found (1.8.13), but current spec prohibits updating: fakewebserver > 1.8.6, < 1.9\nAll requirements up-to-date.\n"
             self.assertEquals(u(result.output), u(expected_output))
             self.assertIsNone(result.exception)
             self.assertEquals(result.exit_code, 0)
@@ -845,7 +845,7 @@ class PurTestCase(utils.TestCase):
         args = ['-r', tmpfile]
 
         with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
-            project = 'django'
+            project = 'fakewebserver'
             version = '0.9.1'
             link = Link('')
             candidate = InstallationCandidate(project, version, link)
