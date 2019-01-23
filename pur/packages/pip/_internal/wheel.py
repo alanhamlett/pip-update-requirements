@@ -5,7 +5,6 @@ from __future__ import absolute_import
 
 import collections
 import compileall
-import copy
 import csv
 import hashlib
 import logging
@@ -17,9 +16,8 @@ import sys
 import warnings
 from base64 import urlsafe_b64encode
 from email.parser import Parser
-from sysconfig import get_paths
 
-from pip._vendor import pkg_resources, pytoml
+from pip._vendor import pkg_resources
 from pip._vendor.distlib.scripts import ScriptMaker
 from pip._vendor.packaging.utils import canonicalize_name
 from pip._vendor.six import StringIO
@@ -27,14 +25,15 @@ from pip._vendor.six import StringIO
 from pip._internal import pep425tags
 from pip._internal.download import path_to_url, unpack_url
 from pip._internal.exceptions import (
-    InstallationError, InvalidWheelFilename, UnsupportedWheel
+    InstallationError, InvalidWheelFilename, UnsupportedWheel,
 )
 from pip._internal.locations import (
-    PIP_DELETE_MARKER_FILENAME, distutils_scheme
+    PIP_DELETE_MARKER_FILENAME, distutils_scheme,
 )
+from pip._internal.models.link import Link
 from pip._internal.utils.logging import indent_log
 from pip._internal.utils.misc import (
-    call_subprocess, captured_stdout, ensure_dir, read_chunks
+    call_subprocess, captured_stdout, ensure_dir, read_chunks,
 )
 from pip._internal.utils.setuptools_build import SETUPTOOLS_SHIM
 from pip._internal.utils.temp_dir import TempDirectory
@@ -42,9 +41,22 @@ from pip._internal.utils.typing import MYPY_CHECK_RUNNING
 from pip._internal.utils.ui import open_spinner
 
 if MYPY_CHECK_RUNNING:
-    from typing import Dict, List, Optional
+    from typing import (  # noqa: F401
+        Dict, List, Optional, Sequence, Mapping, Tuple, IO, Text, Any,
+        Union, Iterable
+    )
+    from pip._vendor.packaging.requirements import Requirement  # noqa: F401
+    from pip._internal.req.req_install import InstallRequirement  # noqa: F401
+    from pip._internal.download import PipSession  # noqa: F401
+    from pip._internal.index import PackageFinder  # noqa: F401
+    from pip._internal.operations.prepare import (  # noqa: F401
+        RequirementPreparer
+    )
+    from pip._internal.cache import WheelCache  # noqa: F401
+    from pip._internal.pep425tags import Pep425Tag  # noqa: F401
 
-wheel_ext = '.whl'
+    InstalledCSVRow = Tuple[str, Union[str, Text], str]
+
 
 VERSION_COMPATIBLE = (1, 0)
 
@@ -52,9 +64,10 @@ VERSION_COMPATIBLE = (1, 0)
 logger = logging.getLogger(__name__)
 
 
-def rehash(path, algo='sha256', blocksize=1 << 20):
-    """Return (hash, length) for path using hashlib.new(algo)"""
-    h = hashlib.new(algo)
+def rehash(path, blocksize=1 << 20):
+    # type: (str, int) -> Tuple[str, str]
+    """Return (hash, length) for path using hashlib.sha256()"""
+    h = hashlib.sha256()
     length = 0
     with open(path, 'rb') as f:
         for block in read_chunks(f, size=blocksize):
@@ -63,20 +76,32 @@ def rehash(path, algo='sha256', blocksize=1 << 20):
     digest = 'sha256=' + urlsafe_b64encode(
         h.digest()
     ).decode('latin1').rstrip('=')
-    return (digest, length)
+    # unicode/str python2 issues
+    return (digest, str(length))  # type: ignore
 
 
 def open_for_csv(name, mode):
+    # type: (str, Text) -> IO
     if sys.version_info[0] < 3:
-        nl = {}
+        nl = {}  # type: Dict[str, Any]
         bin = 'b'
     else:
-        nl = {'newline': ''}
+        nl = {'newline': ''}  # type: Dict[str, Any]
         bin = ''
     return open(name, mode + bin, **nl)
 
 
+def replace_python_tag(wheelname, new_tag):
+    # type: (str, str) -> str
+    """Replace the Python tag in a wheel file name with a new value.
+    """
+    parts = wheelname.split('-')
+    parts[-3] = new_tag
+    return '-'.join(parts)
+
+
 def fix_script(path):
+    # type: (str) -> Optional[bool]
     """Replace #!python with #!/path/to/python
     Return True if file was changed."""
     # XXX RECORD hashes will need to be updated
@@ -92,6 +117,7 @@ def fix_script(path):
             script.write(firstline)
             script.write(rest)
         return True
+    return None
 
 
 dist_info_re = re.compile(r"""^(?P<namever>(?P<name>.+?)(-(?P<ver>.+?))?)
@@ -99,6 +125,7 @@ dist_info_re = re.compile(r"""^(?P<namever>(?P<name>.+?)(-(?P<ver>.+?))?)
 
 
 def root_is_purelib(name, wheeldir):
+    # type: (str, str) -> bool
     """
     Return True if the extracted wheel in wheeldir should go into purelib.
     """
@@ -115,6 +142,7 @@ def root_is_purelib(name, wheeldir):
 
 
 def get_entrypoints(filename):
+    # type: (str) -> Tuple[Dict[str, str], Dict[str, str]]
     if not os.path.exists(filename):
         return {}, {}
 
@@ -146,7 +174,7 @@ def get_entrypoints(filename):
 
 
 def message_about_scripts_not_on_PATH(scripts):
-    # type: (List[str]) -> Optional[str]
+    # type: (Sequence[str]) -> Optional[str]
     """Determine if any scripts are not on PATH and format a warning.
 
     Returns a warning message if one or more scripts are not on PATH,
@@ -162,11 +190,17 @@ def message_about_scripts_not_on_PATH(scripts):
         script_name = os.path.basename(destfile)
         grouped_by_dir[parent_dir].add(script_name)
 
-    path_env_var_parts = os.environ["PATH"].split(os.pathsep)
-    # Warn only for directories that are not on PATH
+    # We don't want to warn for directories that are on PATH.
+    not_warn_dirs = [
+        os.path.normcase(i).rstrip(os.sep) for i in
+        os.environ.get("PATH", "").split(os.pathsep)
+    ]
+    # If an executable sits with sys.executable, we don't warn for it.
+    #     This covers the case of venv invocations without activating the venv.
+    not_warn_dirs.append(os.path.normcase(os.path.dirname(sys.executable)))
     warn_for = {
         parent_dir: scripts for parent_dir, scripts in grouped_by_dir.items()
-        if parent_dir not in path_env_var_parts
+        if os.path.normcase(parent_dir) not in not_warn_dirs
     }
     if not warn_for:
         return None
@@ -200,10 +234,45 @@ def message_about_scripts_not_on_PATH(scripts):
     return "\n".join(msg_lines)
 
 
-def move_wheel_files(name, req, wheeldir, user=False, home=None, root=None,
-                     pycompile=True, scheme=None, isolated=False, prefix=None,
-                     warn_script_location=True):
+def sorted_outrows(outrows):
+    # type: (Iterable[InstalledCSVRow]) -> List[InstalledCSVRow]
+    """
+    Return the given rows of a RECORD file in sorted order.
+
+    Each row is a 3-tuple (path, hash, size) and corresponds to a record of
+    a RECORD file (see PEP 376 and PEP 427 for details).  For the rows
+    passed to this function, the size can be an integer as an int or string,
+    or the empty string.
+    """
+    # Normally, there should only be one row per path, in which case the
+    # second and third elements don't come into play when sorting.
+    # However, in cases in the wild where a path might happen to occur twice,
+    # we don't want the sort operation to trigger an error (but still want
+    # determinism).  Since the third element can be an int or string, we
+    # coerce each element to a string to avoid a TypeError in this case.
+    # For additional background, see--
+    # https://github.com/pypa/pip/issues/5868
+    return sorted(outrows, key=lambda row: tuple(str(x) for x in row))
+
+
+def move_wheel_files(
+    name,  # type: str
+    req,  # type: Requirement
+    wheeldir,  # type: str
+    user=False,  # type: bool
+    home=None,  # type: Optional[str]
+    root=None,  # type: Optional[str]
+    pycompile=True,  # type: bool
+    scheme=None,  # type: Optional[Mapping[str, str]]
+    isolated=False,  # type: bool
+    prefix=None,  # type: Optional[str]
+    warn_script_location=True  # type: bool
+):
+    # type: (...) -> None
     """Install a wheel"""
+    # TODO: Investigate and break this up.
+    # TODO: Look into moving this into a dedicated class for representing an
+    #       installation.
 
     if not scheme:
         scheme = distutils_scheme(
@@ -216,7 +285,7 @@ def move_wheel_files(name, req, wheeldir, user=False, home=None, root=None,
     else:
         lib_dir = scheme['platlib']
 
-    info_dir = []
+    info_dir = []  # type: List[str]
     data_dirs = []
     source = wheeldir.rstrip(os.path.sep) + os.path.sep
 
@@ -224,9 +293,9 @@ def move_wheel_files(name, req, wheeldir, user=False, home=None, root=None,
     #   installed = files copied from the wheel to the destination
     #   changed = files changed while installing (scripts #! line typically)
     #   generated = files newly generated during the install (script wrappers)
-    installed = {}
+    installed = {}  # type: Dict[str, str]
     changed = set()
-    generated = []
+    generated = []  # type: List[str]
 
     # Compile all of the pyc files that we're going to be installing
     if pycompile:
@@ -278,6 +347,17 @@ def move_wheel_files(name, req, wheeldir, user=False, home=None, root=None,
                 # to ensure we don't install empty dirs; empty dirs can't be
                 # uninstalled.
                 ensure_dir(destdir)
+
+                # copyfile (called below) truncates the destination if it
+                # exists and then writes the new contents. This is fine in most
+                # cases, but can cause a segfault if pip has loaded a shared
+                # object (e.g. from pyopenssl through its vendored urllib3)
+                # Since the shared object is mmap'd an attempt to call a
+                # symbol in it will then cause a segfault. Unlinking the file
+                # allows writing of new contents while allowing the process to
+                # continue to use the old copy.
+                if os.path.exists(destfile):
+                    os.unlink(destfile)
 
                 # We use copyfile (not move, copy, or copy2) to be extra sure
                 # that we are not moving directories over (copyfile fails for
@@ -349,7 +429,7 @@ def move_wheel_files(name, req, wheeldir, user=False, home=None, root=None,
     # Ensure we don't generate any variants for scripts because this is almost
     # never what somebody wants.
     # See https://bitbucket.org/pypa/distlib/issue/35/
-    maker.variants = set(('', ))
+    maker.variants = {''}
 
     # This is required because otherwise distlib creates scripts that are not
     # executable.
@@ -373,8 +453,9 @@ def move_wheel_files(name, req, wheeldir, user=False, home=None, root=None,
             "import_name": entry.suffix.split(".")[0],
             "func": entry.suffix,
         }
-
-    maker._get_script_text = _get_script_text
+    # ignore type, because mypy disallows assigning to a method,
+    # see https://github.com/python/mypy/issues/2427
+    maker._get_script_text = _get_script_text  # type: ignore
     maker.script_template = r"""# -*- coding: utf-8 -*-
 import re
 import sys
@@ -460,7 +541,7 @@ if __name__ == '__main__':
         if warn_script_location:
             msg = message_about_scripts_not_on_PATH(generated_console_scripts)
             if msg is not None:
-                logger.warn(msg)
+                logger.warning(msg)
 
     if len(gui) > 0:
         generated.extend(
@@ -478,31 +559,41 @@ if __name__ == '__main__':
     shutil.move(temp_installer, installer)
     generated.append(installer)
 
+    def get_csv_rows_for_installed(old_csv_rows):
+        # type: (Iterable[List[str]]) -> List[InstalledCSVRow]
+        installed_rows = []  # type: List[InstalledCSVRow]
+        for fpath, digest, length in old_csv_rows:
+            fpath = installed.pop(fpath, fpath)
+            if fpath in changed:
+                digest, length = rehash(fpath)
+            installed_rows.append((fpath, digest, str(length)))
+        for f in generated:
+            digest, length = rehash(f)
+            installed_rows.append((normpath(f, lib_dir), digest, str(length)))
+        for f in installed:
+            installed_rows.append((installed[f], '', ''))
+        return installed_rows
+
     # Record details of all files installed
     record = os.path.join(info_dir[0], 'RECORD')
     temp_record = os.path.join(info_dir[0], 'RECORD.pip')
     with open_for_csv(record, 'r') as record_in:
         with open_for_csv(temp_record, 'w+') as record_out:
             reader = csv.reader(record_in)
+            outrows = get_csv_rows_for_installed(reader)
             writer = csv.writer(record_out)
-            for row in reader:
-                row[0] = installed.pop(row[0], row[0])
-                if row[0] in changed:
-                    row[1], row[2] = rehash(row[0])
+            # Sort to simplify testing.
+            for row in sorted_outrows(outrows):
                 writer.writerow(row)
-            for f in generated:
-                h, l = rehash(f)
-                writer.writerow((normpath(f, lib_dir), h, l))
-            for f in installed:
-                writer.writerow((installed[f], '', ''))
     shutil.move(temp_record, record)
 
 
 def wheel_version(source_dir):
+    # type: (Optional[str]) -> Optional[Tuple[int, ...]]
     """
     Return the Wheel-Version of an extracted wheel, if possible.
 
-    Otherwise, return False if we couldn't parse / extract it.
+    Otherwise, return None if we couldn't parse / extract it.
     """
     try:
         dist = [d for d in pkg_resources.find_on_path(None, source_dir)][0]
@@ -513,11 +604,12 @@ def wheel_version(source_dir):
         version = wheel_data['Wheel-Version'].strip()
         version = tuple(map(int, version.split('.')))
         return version
-    except:
-        return False
+    except Exception:
+        return None
 
 
 def check_compatibility(version, name):
+    # type: (Optional[Tuple[int, ...]], str) -> None
     """
     Raises errors or warns if called with an incompatible Wheel-Version.
 
@@ -549,7 +641,8 @@ def check_compatibility(version, name):
 class Wheel(object):
     """A wheel file"""
 
-    # TODO: maybe move the install code into this class
+    # TODO: Maybe move the class into the models sub-package
+    # TODO: Maybe move the install code into this class
 
     wheel_file_re = re.compile(
         r"""^(?P<namever>(?P<name>.+?)-(?P<ver>.*?))
@@ -559,6 +652,7 @@ class Wheel(object):
     )
 
     def __init__(self, filename):
+        # type: (str) -> None
         """
         :raises InvalidWheelFilename: when the filename is invalid for a wheel
         """
@@ -578,12 +672,13 @@ class Wheel(object):
         self.plats = wheel_info.group('plat').split('.')
 
         # All the tag combinations from this file
-        self.file_tags = set(
+        self.file_tags = {
             (x, y, z) for x in self.pyversions
             for y in self.abis for z in self.plats
-        )
+        }
 
     def support_index_min(self, tags=None):
+        # type: (Optional[List[Pep425Tag]]) -> Optional[int]
         """
         Return the lowest index that one of the wheel's file_tag combinations
         achieves in the supported_tags list e.g. if there are 8 supported tags,
@@ -596,69 +691,35 @@ class Wheel(object):
         return min(indexes) if indexes else None
 
     def supported(self, tags=None):
+        # type: (Optional[List[Pep425Tag]]) -> bool
         """Is this wheel supported on this system?"""
         if tags is None:  # for mock
             tags = pep425tags.get_supported()
         return bool(set(tags).intersection(self.file_tags))
 
 
-class BuildEnvironment(object):
-    """Context manager to install build deps in a simple temporary environment
+def _contains_egg_info(
+        s, _egg_info_re=re.compile(r'([a-z0-9_.]+)-([a-z0-9_.!+-]+)', re.I)):
+    """Determine whether the string looks like an egg_info.
+
+    :param s: The string to parse. E.g. foo-2.1
     """
-    def __init__(self, no_clean):
-        self._temp_dir = TempDirectory(kind="build-env")
-        self._no_clean = no_clean
-
-    def __enter__(self):
-        self._temp_dir.create()
-
-        self.save_path = os.environ.get('PATH', None)
-        self.save_pythonpath = os.environ.get('PYTHONPATH', None)
-
-        install_scheme = 'nt' if (os.name == 'nt') else 'posix_prefix'
-        install_dirs = get_paths(install_scheme, vars={
-            'base': self._temp_dir.path,
-            'platbase': self._temp_dir.path,
-        })
-
-        scripts = install_dirs['scripts']
-        if self.save_path:
-            os.environ['PATH'] = scripts + os.pathsep + self.save_path
-        else:
-            os.environ['PATH'] = scripts + os.pathsep + os.defpath
-
-        if install_dirs['purelib'] == install_dirs['platlib']:
-            lib_dirs = install_dirs['purelib']
-        else:
-            lib_dirs = install_dirs['purelib'] + os.pathsep + \
-                install_dirs['platlib']
-        if self.save_pythonpath:
-            os.environ['PYTHONPATH'] = lib_dirs + os.pathsep + \
-                self.save_pythonpath
-        else:
-            os.environ['PYTHONPATH'] = lib_dirs
-
-        return self._temp_dir.path
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        if not self._no_clean:
-            self._temp_dir.cleanup()
-        if self.save_path is None:
-            os.environ.pop('PATH', None)
-        else:
-            os.environ['PATH'] = self.save_path
-
-        if self.save_pythonpath is None:
-            os.environ.pop('PYTHONPATH', None)
-        else:
-            os.environ['PYTHONPATH'] = self.save_pythonpath
+    return bool(_egg_info_re.search(s))
 
 
 class WheelBuilder(object):
     """Build wheels from a RequirementSet."""
 
-    def __init__(self, finder, preparer, wheel_cache,
-                 build_options=None, global_options=None, no_clean=False):
+    def __init__(
+        self,
+        finder,  # type: PackageFinder
+        preparer,  # type: RequirementPreparer
+        wheel_cache,  # type: WheelCache
+        build_options=None,  # type: Optional[List[str]]
+        global_options=None,  # type: Optional[List[str]]
+        no_clean=False  # type: bool
+    ):
+        # type: (...) -> None
         self.finder = finder
         self.preparer = preparer
         self.wheel_cache = wheel_cache
@@ -669,63 +730,23 @@ class WheelBuilder(object):
         self.global_options = global_options or []
         self.no_clean = no_clean
 
-    def _find_build_reqs(self, req):
-        """Get a list of the packages required to build the project, if any,
-        and a flag indicating whether pyproject.toml is present, indicating
-        that the build should be isolated.
-
-        Build requirements can be specified in a pyproject.toml, as described
-        in PEP 518. If this file exists but doesn't specify build
-        requirements, pip will default to installing setuptools and wheel.
-        """
-        if os.path.isfile(req.pyproject_toml):
-            with open(req.pyproject_toml) as f:
-                pp_toml = pytoml.load(f)
-            return pp_toml.get('build-system', {})\
-                .get('requires', ['setuptools', 'wheel']), True
-
-        return ['setuptools', 'wheel'], False
-
-    def _install_build_reqs(self, reqs, prefix):
-        # Local import to avoid circular import (wheel <-> req_install)
-        from pip._internal.req.req_install import InstallRequirement
-        from pip._internal.index import FormatControl
-        # Ignore the --no-binary option when installing the build system, so
-        # we don't recurse trying to build a self-hosting build system.
-        finder = copy.copy(self.finder)
-        finder.format_control = FormatControl(set(), set())
-        urls = [finder.find_requirement(InstallRequirement.from_line(r),
-                                        upgrade=False).url
-                for r in reqs]
-
-        args = [sys.executable, '-m', 'pip', 'install', '--ignore-installed',
-                '--prefix', prefix] + list(urls)
-        with open_spinner("Installing build dependencies") as spinner:
-            call_subprocess(args, show_stdout=False, spinner=spinner)
-
     def _build_one(self, req, output_dir, python_tag=None):
         """Build one wheel.
 
         :return: The filename of the built wheel, or None if the build failed.
         """
-        build_reqs, isolate = self._find_build_reqs(req)
-        if 'setuptools' not in build_reqs:
-            logger.warning(
-                "This version of pip does not implement PEP 516, so "
-                "it cannot build a wheel without setuptools. You may need to "
-                "upgrade to a newer version of pip.")
         # Install build deps into temporary directory (PEP 518)
-        with BuildEnvironment(self.no_clean) as prefix:
-            self._install_build_reqs(build_reqs, prefix)
+        with req.build_env:
             return self._build_one_inside_env(req, output_dir,
-                                              python_tag=python_tag,
-                                              isolate=True)
+                                              python_tag=python_tag)
 
-    def _build_one_inside_env(self, req, output_dir, python_tag=None,
-                              isolate=False):
+    def _build_one_inside_env(self, req, output_dir, python_tag=None):
         with TempDirectory(kind="wheel") as temp_dir:
-            if self.__build_one(req, temp_dir.path, python_tag=python_tag,
-                                isolate=isolate):
+            if req.use_pep517:
+                builder = self._build_one_pep517
+            else:
+                builder = self._build_one_legacy
+            if builder(req, temp_dir.path, python_tag=python_tag):
                 try:
                     wheel_name = os.listdir(temp_dir.path)[0]
                     wheel_path = os.path.join(output_dir, wheel_name)
@@ -734,28 +755,49 @@ class WheelBuilder(object):
                     )
                     logger.info('Stored in directory: %s', output_dir)
                     return wheel_path
-                except:
+                except Exception:
                     pass
             # Ignore return, we can't do anything else useful.
             self._clean_one(req)
             return None
 
-    def _base_setup_args(self, req, isolate=False):
-        flags = '-u'
-        # The -S flag currently breaks Python in virtualenvs, because it relies
-        # on site.py to find parts of the standard library outside the env. So
-        # isolation is disabled for now.
-        # if isolate:
-        #     flags += 'S'
+    def _base_setup_args(self, req):
+        # NOTE: Eventually, we'd want to also -S to the flags here, when we're
+        # isolating. Currently, it breaks Python in virtualenvs, because it
+        # relies on site.py to find parts of the standard library outside the
+        # virtualenv.
         return [
-            sys.executable, flags, '-c',
+            sys.executable, '-u', '-c',
             SETUPTOOLS_SHIM % req.setup_py
         ] + list(self.global_options)
 
-    def __build_one(self, req, tempd, python_tag=None, isolate=False):
-        base_args = self._base_setup_args(req, isolate=isolate)
+    def _build_one_pep517(self, req, tempd, python_tag=None):
+        assert req.metadata_directory is not None
+        try:
+            req.spin_message = 'Building wheel for %s (PEP 517)' % (req.name,)
+            logger.debug('Destination directory: %s', tempd)
+            wheelname = req.pep517_backend.build_wheel(
+                tempd,
+                metadata_directory=req.metadata_directory
+            )
+            if python_tag:
+                # General PEP 517 backends don't necessarily support
+                # a "--python-tag" option, so we rename the wheel
+                # file directly.
+                newname = replace_python_tag(wheelname, python_tag)
+                os.rename(
+                    os.path.join(tempd, wheelname),
+                    os.path.join(tempd, newname)
+                )
+            return True
+        except Exception:
+            logger.error('Failed building wheel for %s', req.name)
+            return False
 
-        spin_message = 'Running setup.py bdist_wheel for %s' % (req.name,)
+    def _build_one_legacy(self, req, tempd, python_tag=None):
+        base_args = self._base_setup_args(req)
+
+        spin_message = 'Building wheel for %s (setup.py)' % (req.name,)
         with open_spinner(spin_message) as spinner:
             logger.debug('Destination directory: %s', tempd)
             wheel_args = base_args + ['bdist_wheel', '-d', tempd] \
@@ -764,16 +806,11 @@ class WheelBuilder(object):
             if python_tag is not None:
                 wheel_args += ["--python-tag", python_tag]
 
-            env = {}
-            if isolate:
-                env['PYTHONNOUSERSITE'] = '1'
-
             try:
                 call_subprocess(wheel_args, cwd=req.setup_py_dir,
-                                extra_environ=env,
                                 show_stdout=False, spinner=spinner)
                 return True
-            except:
+            except Exception:
                 spinner.finish("error")
                 logger.error('Failed building wheel for %s', req.name)
                 return False
@@ -786,70 +823,87 @@ class WheelBuilder(object):
         try:
             call_subprocess(clean_args, cwd=req.source_dir, show_stdout=False)
             return True
-        except:
+        except Exception:
             logger.error('Failed cleaning build dir for %s', req.name)
             return False
 
-    def build(self, requirements, session, autobuilding=False):
+    def build(
+        self,
+        requirements,  # type: Iterable[InstallRequirement]
+        session,  # type: PipSession
+        autobuilding=False  # type: bool
+    ):
+        # type: (...) -> List[InstallRequirement]
         """Build wheels.
 
         :param unpack: If True, replace the sdist we built from with the
             newly built wheel, in preparation for installation.
         :return: True if all the wheels built correctly.
         """
-        from pip._internal import index
-
-        building_is_possible = self._wheel_dir or (
-            autobuilding and self.wheel_cache.cache_dir
-        )
-        assert building_is_possible
 
         buildset = []
+        format_control = self.finder.format_control
         for req in requirements:
             if req.constraint:
                 continue
             if req.is_wheel:
                 if not autobuilding:
                     logger.info(
-                        'Skipping %s, due to already being wheel.', req.name)
+                        'Skipping %s, due to already being wheel.', req.name,
+                    )
             elif autobuilding and req.editable:
-                pass
-            elif autobuilding and req.link and not req.link.is_artifact:
                 pass
             elif autobuilding and not req.source_dir:
                 pass
+            elif autobuilding and req.link and not req.link.is_artifact:
+                # VCS checkout. Build wheel just for this run.
+                buildset.append((req, True))
             else:
+                ephem_cache = False
                 if autobuilding:
                     link = req.link
                     base, ext = link.splitext()
-                    if index.egg_info_matches(base, None, link) is None:
-                        # Doesn't look like a package - don't autobuild a wheel
-                        # because we'll have no way to lookup the result sanely
-                        continue
-                    if "binary" not in index.fmt_ctl_formats(
-                            self.finder.format_control,
+                    if not _contains_egg_info(base):
+                        # E.g. local directory. Build wheel just for this run.
+                        ephem_cache = True
+                    if "binary" not in format_control.get_allowed_formats(
                             canonicalize_name(req.name)):
                         logger.info(
                             "Skipping bdist_wheel for %s, due to binaries "
-                            "being disabled for it.", req.name)
+                            "being disabled for it.", req.name,
+                        )
                         continue
-                buildset.append(req)
+                buildset.append((req, ephem_cache))
 
         if not buildset:
-            return True
+            return []
+
+        # Is any wheel build not using the ephemeral cache?
+        if any(not ephem_cache for _, ephem_cache in buildset):
+            have_directory_for_build = self._wheel_dir or (
+                autobuilding and self.wheel_cache.cache_dir
+            )
+            assert have_directory_for_build
+
+        # TODO by @pradyunsg
+        # Should break up this method into 2 separate methods.
 
         # Build the wheels.
         logger.info(
             'Building wheels for collected packages: %s',
-            ', '.join([req.name for req in buildset]),
+            ', '.join([req.name for (req, _) in buildset]),
         )
+        _cache = self.wheel_cache  # shorter name
         with indent_log():
             build_success, build_failure = [], []
-            for req in buildset:
+            for req, ephem in buildset:
                 python_tag = None
                 if autobuilding:
                     python_tag = pep425tags.implementation_tag
-                    output_dir = self.wheel_cache.get_path_for_link(req.link)
+                    if ephem:
+                        output_dir = _cache.get_ephem_path_for_link(req.link)
+                    else:
+                        output_dir = _cache.get_path_for_link(req.link)
                     try:
                         ensure_dir(output_dir)
                     except OSError as e:
@@ -883,12 +937,13 @@ class WheelBuilder(object):
                             self.preparer.build_dir
                         )
                         # Update the link for this.
-                        req.link = index.Link(path_to_url(wheel_file))
+                        req.link = Link(path_to_url(wheel_file))
                         assert req.link.is_wheel
                         # extract the wheel into the dir
                         unpack_url(
                             req.link, req.source_dir, None, False,
-                            session=session)
+                            session=session,
+                        )
                 else:
                     build_failure.append(req)
 
@@ -903,5 +958,5 @@ class WheelBuilder(object):
                 'Failed to build %s',
                 ' '.join([req.name for req in build_failure]),
             )
-        # Return True if all builds were successful
-        return len(build_failure) == 0
+        # Return a list of requirements that failed to build
+        return build_failure

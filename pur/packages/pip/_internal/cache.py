@@ -8,10 +8,16 @@ import os
 
 from pip._vendor.packaging.utils import canonicalize_name
 
-from pip._internal import index
-from pip._internal.compat import expanduser
 from pip._internal.download import path_to_url
+from pip._internal.models.link import Link
+from pip._internal.utils.compat import expanduser
+from pip._internal.utils.temp_dir import TempDirectory
+from pip._internal.utils.typing import MYPY_CHECK_RUNNING
 from pip._internal.wheel import InvalidWheelFilename, Wheel
+
+if MYPY_CHECK_RUNNING:
+    from typing import Optional, Set, List, Any  # noqa: F401
+    from pip._internal.index import FormatControl  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
@@ -21,13 +27,14 @@ class Cache(object):
 
 
         :param cache_dir: The root of the cache.
-        :param format_control: A pip.index.FormatControl object to limit
+        :param format_control: An object of FormatControl class to limit
             binaries being read from the cache.
         :param allowed_formats: which formats of files the cache should store.
             ('binary' and 'source' are the only allowed values)
     """
 
     def __init__(self, cache_dir, format_control, allowed_formats):
+        # type: (str, FormatControl, Set[str]) -> None
         super(Cache, self).__init__()
         self.cache_dir = expanduser(cache_dir) if cache_dir else None
         self.format_control = format_control
@@ -37,6 +44,7 @@ class Cache(object):
         assert self.allowed_formats.union(_valid_formats) == _valid_formats
 
     def _get_cache_path_parts(self, link):
+        # type: (Link) -> List[str]
         """Get parts of part that must be os.path.joined with cache_dir
         """
 
@@ -62,6 +70,7 @@ class Cache(object):
         return parts
 
     def _get_candidates(self, link, package_name):
+        # type: (Link, Optional[str]) -> List[Any]
         can_not_cache = (
             not self.cache_dir or
             not package_name or
@@ -71,8 +80,8 @@ class Cache(object):
             return []
 
         canonical_name = canonicalize_name(package_name)
-        formats = index.fmt_ctl_formats(
-            self.format_control, canonical_name
+        formats = self.format_control.get_allowed_formats(
+            canonical_name
         )
         if not self.allowed_formats.intersection(formats):
             return []
@@ -86,31 +95,42 @@ class Cache(object):
             raise
 
     def get_path_for_link(self, link):
+        # type: (Link) -> str
         """Return a directory to store cached items in for link.
         """
         raise NotImplementedError()
 
     def get(self, link, package_name):
+        # type: (Link, Optional[str]) -> Link
         """Returns a link to a cached item if it exists, otherwise returns the
         passed link.
         """
         raise NotImplementedError()
 
     def _link_for_candidate(self, link, candidate):
+        # type: (Link, str) -> Link
         root = self.get_path_for_link(link)
         path = os.path.join(root, candidate)
 
-        return index.Link(path_to_url(path))
+        return Link(path_to_url(path))
+
+    def cleanup(self):
+        # type: () -> None
+        pass
 
 
-class WheelCache(Cache):
+class SimpleWheelCache(Cache):
     """A cache of wheels for future installs.
     """
 
     def __init__(self, cache_dir, format_control):
-        super(WheelCache, self).__init__(cache_dir, format_control, {"binary"})
+        # type: (str, FormatControl) -> None
+        super(SimpleWheelCache, self).__init__(
+            cache_dir, format_control, {"binary"}
+        )
 
     def get_path_for_link(self, link):
+        # type: (Link) -> str
         """Return a directory to store cached wheels for link
 
         Because there are M wheels for any one sdist, we provide a directory
@@ -127,11 +147,11 @@ class WheelCache(Cache):
         """
         parts = self._get_cache_path_parts(link)
 
-        # Inside of the base location for cached wheels, expand our parts and
-        # join them all together.
+        # Store wheels within the root cache_dir
         return os.path.join(self.cache_dir, "wheels", *parts)
 
     def get(self, link, package_name):
+        # type: (Link, Optional[str]) -> Link
         candidates = []
 
         for wheel_name in self._get_candidates(link, package_name):
@@ -148,3 +168,57 @@ class WheelCache(Cache):
             return link
 
         return self._link_for_candidate(link, min(candidates)[1])
+
+
+class EphemWheelCache(SimpleWheelCache):
+    """A SimpleWheelCache that creates it's own temporary cache directory
+    """
+
+    def __init__(self, format_control):
+        # type: (FormatControl) -> None
+        self._temp_dir = TempDirectory(kind="ephem-wheel-cache")
+        self._temp_dir.create()
+
+        super(EphemWheelCache, self).__init__(
+            self._temp_dir.path, format_control
+        )
+
+    def cleanup(self):
+        # type: () -> None
+        self._temp_dir.cleanup()
+
+
+class WheelCache(Cache):
+    """Wraps EphemWheelCache and SimpleWheelCache into a single Cache
+
+    This Cache allows for gracefully degradation, using the ephem wheel cache
+    when a certain link is not found in the simple wheel cache first.
+    """
+
+    def __init__(self, cache_dir, format_control):
+        # type: (str, FormatControl) -> None
+        super(WheelCache, self).__init__(
+            cache_dir, format_control, {'binary'}
+        )
+        self._wheel_cache = SimpleWheelCache(cache_dir, format_control)
+        self._ephem_cache = EphemWheelCache(format_control)
+
+    def get_path_for_link(self, link):
+        # type: (Link) -> str
+        return self._wheel_cache.get_path_for_link(link)
+
+    def get_ephem_path_for_link(self, link):
+        # type: (Link) -> str
+        return self._ephem_cache.get_path_for_link(link)
+
+    def get(self, link, package_name):
+        # type: (Link, Optional[str]) -> Link
+        retval = self._wheel_cache.get(link, package_name)
+        if retval is link:
+            retval = self._ephem_cache.get(link, package_name)
+        return retval
+
+    def cleanup(self):
+        # type: () -> None
+        self._wheel_cache.cleanup()
+        self._ephem_cache.cleanup()

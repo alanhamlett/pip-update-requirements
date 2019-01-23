@@ -6,9 +6,15 @@ import codecs
 import locale
 import logging
 import os
+import shutil
 import sys
 
 from pip._vendor.six import text_type
+
+from pip._internal.utils.typing import MYPY_CHECK_RUNNING
+
+if MYPY_CHECK_RUNNING:
+    from typing import Tuple, Text  # noqa: F401
 
 try:
     import ipaddress
@@ -17,13 +23,14 @@ except ImportError:
         from pip._vendor import ipaddress  # type: ignore
     except ImportError:
         import ipaddr as ipaddress  # type: ignore
-        ipaddress.ip_address = ipaddress.IPAddress
-        ipaddress.ip_network = ipaddress.IPNetwork
+        ipaddress.ip_address = ipaddress.IPAddress  # type: ignore
+        ipaddress.ip_network = ipaddress.IPNetwork  # type: ignore
 
 
 __all__ = [
     "ipaddress", "uses_pycache", "console_to_str", "native_str",
-    "get_path_uid", "stdlib_pkgs", "WINDOWS", "samefile",
+    "get_path_uid", "stdlib_pkgs", "WINDOWS", "samefile", "get_terminal_size",
+    "get_extension_suffixes",
 ]
 
 
@@ -60,11 +67,13 @@ else:
         return u"".join(u"\\x%x" % c for c in raw_bytes), err.end
     codecs.register_error(
         "backslashreplace_decode",
-        backslashreplace_decode_fn)
+        backslashreplace_decode_fn,
+    )
     backslashreplace_decode = "backslashreplace_decode"
 
 
 def console_to_str(data):
+    # type: (bytes) -> Text
     """Return a string, safe for output, of subprocess output.
 
     We assume the data is in the locale preferred encoding.
@@ -85,12 +94,13 @@ def console_to_str(data):
     # Now try to decode the data - if we fail, warn the user and
     # decode with replacement.
     try:
-        s = data.decode(encoding)
+        decoded_data = data.decode(encoding)
     except UnicodeDecodeError:
         logger.warning(
-            "Subprocess output does not appear to be encoded as %s" %
-            encoding)
-        s = data.decode(encoding, errors=backslashreplace_decode)
+            "Subprocess output does not appear to be encoded as %s",
+            encoding,
+        )
+        decoded_data = data.decode(encoding, errors=backslashreplace_decode)
 
     # Make sure we can print the output, by encoding it to the output
     # encoding with replacement of unencodable characters, and then
@@ -108,20 +118,25 @@ def console_to_str(data):
                               "encoding", None)
 
     if output_encoding:
-        s = s.encode(output_encoding, errors="backslashreplace")
-        s = s.decode(output_encoding)
+        output_encoded = decoded_data.encode(
+            output_encoding,
+            errors="backslashreplace"
+        )
+        decoded_data = output_encoded.decode(output_encoding)
 
-    return s
+    return decoded_data
 
 
 if sys.version_info >= (3,):
     def native_str(s, replace=False):
+        # type: (str, bool) -> str
         if isinstance(s, bytes):
             return s.decode('utf-8', 'replace' if replace else 'strict')
         return s
 
 else:
     def native_str(s, replace=False):
+        # type: (str, bool) -> str
         # Replace is ignored -- unicode to UTF-8 can't fail
         if isinstance(s, text_type):
             return s.encode('utf-8')
@@ -129,6 +144,7 @@ else:
 
 
 def get_path_uid(path):
+    # type: (str) -> int
     """
     Return path's uid.
 
@@ -157,11 +173,24 @@ def get_path_uid(path):
     return file_uid
 
 
+if sys.version_info >= (3, 4):
+    from importlib.machinery import EXTENSION_SUFFIXES
+
+    def get_extension_suffixes():
+        return EXTENSION_SUFFIXES
+else:
+    from imp import get_suffixes
+
+    def get_extension_suffixes():
+        return [suffix[0] for suffix in get_suffixes()]
+
+
 def expanduser(path):
+    # type: (str) -> str
     """
     Expand ~ and ~user constructions.
 
-    Includes a workaround for http://bugs.python.org/issue14768
+    Includes a workaround for https://bugs.python.org/issue14768
     """
     expanded = os.path.expanduser(path)
     if path.startswith('~/') and expanded.startswith('//'):
@@ -183,6 +212,7 @@ WINDOWS = (sys.platform.startswith("win") or
 
 
 def samefile(file1, file2):
+    # type: (str, str) -> bool
     """Provide an alternative for os.path.samefile on Windows/Python2"""
     if hasattr(os.path, 'samefile'):
         return os.path.samefile(file1, file2)
@@ -190,3 +220,45 @@ def samefile(file1, file2):
         path1 = os.path.normcase(os.path.abspath(file1))
         path2 = os.path.normcase(os.path.abspath(file2))
         return path1 == path2
+
+
+if hasattr(shutil, 'get_terminal_size'):
+    def get_terminal_size():
+        # type: () -> Tuple[int, int]
+        """
+        Returns a tuple (x, y) representing the width(x) and the height(y)
+        in characters of the terminal window.
+        """
+        return tuple(shutil.get_terminal_size())  # type: ignore
+else:
+    def get_terminal_size():
+        # type: () -> Tuple[int, int]
+        """
+        Returns a tuple (x, y) representing the width(x) and the height(y)
+        in characters of the terminal window.
+        """
+        def ioctl_GWINSZ(fd):
+            try:
+                import fcntl
+                import termios
+                import struct
+                cr = struct.unpack_from(
+                    'hh',
+                    fcntl.ioctl(fd, termios.TIOCGWINSZ, '12345678')
+                )
+            except Exception:
+                return None
+            if cr == (0, 0):
+                return None
+            return cr
+        cr = ioctl_GWINSZ(0) or ioctl_GWINSZ(1) or ioctl_GWINSZ(2)
+        if not cr:
+            try:
+                fd = os.open(os.ctermid(), os.O_RDONLY)
+                cr = ioctl_GWINSZ(fd)
+                os.close(fd)
+            except Exception:
+                pass
+        if not cr:
+            cr = (os.environ.get('LINES', 25), os.environ.get('COLUMNS', 80))
+        return int(cr[1]), int(cr[0])

@@ -9,8 +9,9 @@ from distutils.util import strtobool
 
 from pip._vendor.six import string_types
 
-from pip._internal.configuration import Configuration
-from pip._internal.utils.misc import get_terminal_size
+from pip._internal.cli.status_codes import UNKNOWN_ERROR
+from pip._internal.configuration import Configuration, ConfigurationError
+from pip._internal.utils.compat import get_terminal_size
 
 logger = logging.getLogger(__name__)
 
@@ -177,9 +178,6 @@ class ConfigOptionParser(CustomOptionParser):
         the environ. Does a little special handling for certain types of
         options (lists)."""
 
-        # Load the configuration
-        self.config.load()
-
         # Accumulate complex default state.
         self.values = optparse.Values(self.defaults)
         late_eval = set()
@@ -195,7 +193,14 @@ class ConfigOptionParser(CustomOptionParser):
                 continue
 
             if option.action in ('store_true', 'store_false', 'count'):
-                val = strtobool(val)
+                try:
+                    val = strtobool(val)
+                except ValueError:
+                    error_msg = invalid_config_error_message(
+                        option.action, key, val
+                    )
+                    self.error(error_msg)
+
             elif option.action == 'append':
                 val = val.split()
                 val = [self.check_default(option, key, v) for v in val]
@@ -224,6 +229,12 @@ class ConfigOptionParser(CustomOptionParser):
             # Old, pre-Optik 1.5 behaviour.
             return optparse.Values(self.defaults)
 
+        # Load the configuration, or error out in case of an error
+        try:
+            self.config.load()
+        except ConfigurationError as err:
+            self.exit(UNKNOWN_ERROR, str(err))
+
         defaults = self._update_defaults(self.defaults.copy())  # ours
         for option in self._get_all_options():
             default = defaults.get(option.dest)
@@ -234,4 +245,17 @@ class ConfigOptionParser(CustomOptionParser):
 
     def error(self, msg):
         self.print_usage(sys.stderr)
-        self.exit(2, "%s\n" % msg)
+        self.exit(UNKNOWN_ERROR, "%s\n" % msg)
+
+
+def invalid_config_error_message(action, key, val):
+    """Returns a better error message when invalid configuration option
+    is provided."""
+    if action in ('store_true', 'store_false'):
+        return ("{0} is not a valid value for {1} option, "
+                "please specify a boolean value like yes/no, "
+                "true/false or 1/0 instead.").format(val, key)
+
+    return ("{0} is not a valid value for {1} option, "
+            "please specify a numerical value like 1/0 "
+            "instead.").format(val, key)

@@ -4,14 +4,14 @@ from __future__ import absolute_import
 import logging
 import os
 
-from pip._internal import cmdoptions
-from pip._internal.basecommand import RequirementCommand
 from pip._internal.cache import WheelCache
+from pip._internal.cli import cmdoptions
+from pip._internal.cli.base_command import RequirementCommand
 from pip._internal.exceptions import CommandError, PreviousBuildDirError
 from pip._internal.operations.prepare import RequirementPreparer
 from pip._internal.req import RequirementSet
+from pip._internal.req.req_tracker import RequirementTracker
 from pip._internal.resolve import Resolver
-from pip._internal.utils.misc import import_or_raise
 from pip._internal.utils.temp_dir import TempDirectory
 from pip._internal.wheel import WheelBuilder
 
@@ -58,12 +58,17 @@ class WheelCommand(RequirementCommand):
         )
         cmd_opts.add_option(cmdoptions.no_binary())
         cmd_opts.add_option(cmdoptions.only_binary())
+        cmd_opts.add_option(cmdoptions.prefer_binary())
         cmd_opts.add_option(
             '--build-option',
             dest='build_options',
             metavar='options',
             action='append',
-            help="Extra arguments to be supplied to 'setup.py bdist_wheel'.")
+            help="Extra arguments to be supplied to 'setup.py bdist_wheel'.",
+        )
+        cmd_opts.add_option(cmdoptions.no_build_isolation())
+        cmd_opts.add_option(cmdoptions.use_pep517())
+        cmd_opts.add_option(cmdoptions.no_use_pep517())
         cmd_opts.add_option(cmdoptions.constraints())
         cmd_opts.add_option(cmdoptions.editable())
         cmd_opts.add_option(cmdoptions.requirements())
@@ -100,28 +105,7 @@ class WheelCommand(RequirementCommand):
         self.parser.insert_option_group(0, index_opts)
         self.parser.insert_option_group(0, cmd_opts)
 
-    def check_required_packages(self):
-        import_or_raise(
-            'wheel.bdist_wheel',
-            CommandError,
-            "'pip wheel' requires the 'wheel' package. To fix this, run: "
-            "pip install wheel"
-        )
-
-        need_setuptools_message = (
-            "'pip wheel' requires setuptools >= 0.8 for dist-info support. "
-            "To fix this, run: pip install --upgrade setuptools>=0.8"
-        )
-        pkg_resources = import_or_raise(
-            'pkg_resources',
-            CommandError,
-            need_setuptools_message
-        )
-        if not hasattr(pkg_resources, 'DistInfoDistribution'):
-            raise CommandError(need_setuptools_message)
-
     def run(self, options, args):
-        self.check_required_packages()
         cmdoptions.check_install_build_global(options)
 
         index_urls = [options.index_url] + options.extra_index_urls
@@ -139,42 +123,46 @@ class WheelCommand(RequirementCommand):
             build_delete = (not (options.no_clean or options.build_dir))
             wheel_cache = WheelCache(options.cache_dir, options.format_control)
 
-            with TempDirectory(
+            with RequirementTracker() as req_tracker, TempDirectory(
                 options.build_dir, delete=build_delete, kind="wheel"
             ) as directory:
+
                 requirement_set = RequirementSet(
                     require_hashes=options.require_hashes,
                 )
 
-                self.populate_requirement_set(
-                    requirement_set, args, options, finder, session, self.name,
-                    wheel_cache
-                )
-
-                preparer = RequirementPreparer(
-                    build_dir=directory.path,
-                    src_dir=options.src_dir,
-                    download_dir=None,
-                    wheel_download_dir=options.wheel_dir,
-                    progress_bar=options.progress_bar,
-                )
-
-                resolver = Resolver(
-                    preparer=preparer,
-                    finder=finder,
-                    session=session,
-                    wheel_cache=wheel_cache,
-                    use_user_site=False,
-                    upgrade_strategy="to-satisfy-only",
-                    force_reinstall=False,
-                    ignore_dependencies=options.ignore_dependencies,
-                    ignore_requires_python=options.ignore_requires_python,
-                    ignore_installed=True,
-                    isolated=options.isolated_mode,
-                )
-                resolver.resolve(requirement_set)
-
                 try:
+                    self.populate_requirement_set(
+                        requirement_set, args, options, finder, session,
+                        self.name, wheel_cache
+                    )
+
+                    preparer = RequirementPreparer(
+                        build_dir=directory.path,
+                        src_dir=options.src_dir,
+                        download_dir=None,
+                        wheel_download_dir=options.wheel_dir,
+                        progress_bar=options.progress_bar,
+                        build_isolation=options.build_isolation,
+                        req_tracker=req_tracker,
+                    )
+
+                    resolver = Resolver(
+                        preparer=preparer,
+                        finder=finder,
+                        session=session,
+                        wheel_cache=wheel_cache,
+                        use_user_site=False,
+                        upgrade_strategy="to-satisfy-only",
+                        force_reinstall=False,
+                        ignore_dependencies=options.ignore_dependencies,
+                        ignore_requires_python=options.ignore_requires_python,
+                        ignore_installed=True,
+                        isolated=options.isolated_mode,
+                        use_pep517=options.use_pep517
+                    )
+                    resolver.resolve(requirement_set)
+
                     # build wheels
                     wb = WheelBuilder(
                         finder, preparer, wheel_cache,
@@ -182,10 +170,10 @@ class WheelCommand(RequirementCommand):
                         global_options=options.global_options or [],
                         no_clean=options.no_clean,
                     )
-                    wheels_built_successfully = wb.build(
+                    build_failures = wb.build(
                         requirement_set.requirements.values(), session=session,
                     )
-                    if not wheels_built_successfully:
+                    if len(build_failures) != 0:
                         raise CommandError(
                             "Failed to build one or more wheels"
                         )
@@ -195,3 +183,4 @@ class WheelCommand(RequirementCommand):
                 finally:
                     if not options.no_clean:
                         requirement_set.cleanup_files()
+                        wheel_cache.cleanup()

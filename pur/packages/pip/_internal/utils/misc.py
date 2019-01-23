@@ -24,18 +24,33 @@ from pip._vendor import pkg_resources
 from pip._vendor.retrying import retry  # type: ignore
 from pip._vendor.six import PY2
 from pip._vendor.six.moves import input
+from pip._vendor.six.moves.urllib import parse as urllib_parse
+from pip._vendor.six.moves.urllib.parse import unquote as urllib_unquote
 
-from pip._internal.compat import console_to_str, expanduser, stdlib_pkgs
-from pip._internal.exceptions import InstallationError
+from pip._internal.exceptions import CommandError, InstallationError
 from pip._internal.locations import (
     running_under_virtualenv, site_packages, user_site, virtualenv_no_global,
-    write_delete_marker_file
+    write_delete_marker_file,
 )
+from pip._internal.utils.compat import (
+    WINDOWS, console_to_str, expanduser, stdlib_pkgs,
+)
+from pip._internal.utils.typing import MYPY_CHECK_RUNNING
 
 if PY2:
     from io import BytesIO as StringIO
 else:
     from io import StringIO
+
+if MYPY_CHECK_RUNNING:
+    from typing import (  # noqa: F401
+        Optional, Tuple, Iterable, List, Match, Union, Any, Mapping, Text,
+        AnyStr, Container
+    )
+    from pip._vendor.pkg_resources import Distribution  # noqa: F401
+    from pip._internal.models.link import Link  # noqa: F401
+    from pip._internal.utils.ui import SpinnerInterface  # noqa: F401
+
 
 __all__ = ['rmtree', 'display_path', 'backup_dir',
            'ask', 'splitext',
@@ -43,22 +58,24 @@ __all__ = ['rmtree', 'display_path', 'backup_dir',
            'is_svn_page', 'file_contents',
            'split_leading_dir', 'has_leading_dir',
            'normalize_path',
-           'renames', 'get_terminal_size', 'get_prog',
+           'renames', 'get_prog',
            'unzip_file', 'untar_file', 'unpack_file', 'call_subprocess',
            'captured_stdout', 'ensure_dir',
-           'ARCHIVE_EXTENSIONS', 'SUPPORTED_EXTENSIONS',
-           'get_installed_version']
+           'ARCHIVE_EXTENSIONS', 'SUPPORTED_EXTENSIONS', 'WHEEL_EXTENSION',
+           'get_installed_version', 'remove_auth_from_url']
 
 
 logger = std_logging.getLogger(__name__)
 
+WHEEL_EXTENSION = '.whl'
 BZ2_EXTENSIONS = ('.tar.bz2', '.tbz')
 XZ_EXTENSIONS = ('.tar.xz', '.txz', '.tlz', '.tar.lz', '.tar.lzma')
-ZIP_EXTENSIONS = ('.zip', '.whl')
+ZIP_EXTENSIONS = ('.zip', WHEEL_EXTENSION)
 TAR_EXTENSIONS = ('.tar.gz', '.tgz', '.tar')
 ARCHIVE_EXTENSIONS = (
     ZIP_EXTENSIONS + BZ2_EXTENSIONS + TAR_EXTENSIONS + XZ_EXTENSIONS)
 SUPPORTED_EXTENSIONS = ZIP_EXTENSIONS + TAR_EXTENSIONS
+
 try:
     import bz2  # noqa
     SUPPORTED_EXTENSIONS += BZ2_EXTENSIONS
@@ -73,14 +90,8 @@ except ImportError:
     logger.debug('lzma module is not available')
 
 
-def import_or_raise(pkg_or_module_string, ExceptionType, *args, **kwargs):
-    try:
-        return __import__(pkg_or_module_string)
-    except ImportError:
-        raise ExceptionType(*args, **kwargs)
-
-
 def ensure_dir(path):
+    # type: (AnyStr) -> None
     """os.path.makedirs without EEXIST."""
     try:
         os.makedirs(path)
@@ -90,6 +101,7 @@ def ensure_dir(path):
 
 
 def get_prog():
+    # type: () -> str
     try:
         prog = os.path.basename(sys.argv[0])
         if prog in ('__main__.py', '-c'):
@@ -104,6 +116,7 @@ def get_prog():
 # Retry every half second for up to 3 seconds
 @retry(stop_max_delay=3000, wait_fixed=500)
 def rmtree(dir, ignore_errors=False):
+    # type: (str, bool) -> None
     shutil.rmtree(dir, ignore_errors=ignore_errors,
                   onerror=rmtree_errorhandler)
 
@@ -124,6 +137,7 @@ def rmtree_errorhandler(func, path, exc_info):
 
 
 def display_path(path):
+    # type: (Union[str, Text]) -> str
     """Gives the display value for a given path, making it relative to cwd
     if possible."""
     path = os.path.normcase(os.path.abspath(path))
@@ -136,6 +150,7 @@ def display_path(path):
 
 
 def backup_dir(dir, ext='.bak'):
+    # type: (str, str) -> str
     """Figure out the name of a directory to back up the given dir to
     (adding .bak, .bak2, etc)"""
     n = 1
@@ -147,6 +162,7 @@ def backup_dir(dir, ext='.bak'):
 
 
 def ask_path_exists(message, options):
+    # type: (str, Iterable[str]) -> str
     for action in os.environ.get('PIP_EXISTS_ACTION', '').split():
         if action in options:
             return action
@@ -154,6 +170,7 @@ def ask_path_exists(message, options):
 
 
 def ask(message, options):
+    # type: (str, Iterable[str]) -> str
     """Ask the message interactively, with the given possible responses"""
     while 1:
         if os.environ.get('PIP_NO_INPUT'):
@@ -173,6 +190,7 @@ def ask(message, options):
 
 
 def format_size(bytes):
+    # type: (float) -> str
     if bytes > 1000 * 1000:
         return '%.1fMB' % (bytes / 1000.0 / 1000)
     elif bytes > 10 * 1000:
@@ -184,16 +202,22 @@ def format_size(bytes):
 
 
 def is_installable_dir(path):
-    """Return True if `path` is a directory containing a setup.py file."""
+    # type: (str) -> bool
+    """Is path is a directory containing setup.py or pyproject.toml?
+    """
     if not os.path.isdir(path):
         return False
     setup_py = os.path.join(path, 'setup.py')
     if os.path.isfile(setup_py):
         return True
+    pyproject_toml = os.path.join(path, 'pyproject.toml')
+    if os.path.isfile(pyproject_toml):
+        return True
     return False
 
 
 def is_svn_page(html):
+    # type: (Union[str, Text]) -> Optional[Match[Union[str, Text]]]
     """
     Returns true if the page appears to be the index page of an svn repository
     """
@@ -202,6 +226,7 @@ def is_svn_page(html):
 
 
 def file_contents(filename):
+    # type: (str) -> Text
     with open(filename, 'rb') as fp:
         return fp.read().decode('utf-8')
 
@@ -216,6 +241,7 @@ def read_chunks(file, size=io.DEFAULT_BUFFER_SIZE):
 
 
 def split_leading_dir(path):
+    # type: (Union[str, Text]) -> List[Union[str, Text]]
     path = path.lstrip('/').lstrip('\\')
     if '/' in path and (('\\' in path and path.find('/') < path.find('\\')) or
                         '\\' not in path):
@@ -223,10 +249,11 @@ def split_leading_dir(path):
     elif '\\' in path:
         return path.split('\\', 1)
     else:
-        return path, ''
+        return [path, '']
 
 
 def has_leading_dir(paths):
+    # type: (Iterable[Union[str, Text]]) -> bool
     """Returns true if all the paths have the same leading path name
     (i.e., everything is in one subdirectory in an archive)"""
     common_prefix = None
@@ -242,6 +269,7 @@ def has_leading_dir(paths):
 
 
 def normalize_path(path, resolve_symlinks=True):
+    # type: (str, bool) -> str
     """
     Convert a path to its canonical, case-normalized, absolute version.
 
@@ -255,6 +283,7 @@ def normalize_path(path, resolve_symlinks=True):
 
 
 def splitext(path):
+    # type: (str) -> Tuple[str, str]
     """Like os.path.splitext, but take off .tar too"""
     base, ext = posixpath.splitext(path)
     if base.lower().endswith('.tar'):
@@ -264,6 +293,7 @@ def splitext(path):
 
 
 def renames(old, new):
+    # type: (str, str) -> None
     """Like os.renames(), but handles renaming across devices."""
     # Implementation borrowed from os.renames().
     head, tail = os.path.split(new)
@@ -281,6 +311,7 @@ def renames(old, new):
 
 
 def is_local(path):
+    # type: (str) -> bool
     """
     Return True if path is within sys.prefix, if we're running in a virtualenv.
 
@@ -293,6 +324,7 @@ def is_local(path):
 
 
 def dist_is_local(dist):
+    # type: (Distribution) -> bool
     """
     Return True if given Distribution object is installed locally
     (i.e. within current virtualenv).
@@ -304,6 +336,7 @@ def dist_is_local(dist):
 
 
 def dist_in_usersite(dist):
+    # type: (Distribution) -> bool
     """
     Return True if given Distribution is installed in user site.
     """
@@ -312,6 +345,7 @@ def dist_in_usersite(dist):
 
 
 def dist_in_site_packages(dist):
+    # type: (Distribution) -> bool
     """
     Return True if given Distribution is installed in
     sysconfig.get_python_lib().
@@ -322,7 +356,10 @@ def dist_in_site_packages(dist):
 
 
 def dist_is_editable(dist):
-    """Is distribution an editable install?"""
+    # type: (Distribution) -> bool
+    """
+    Return True if given Distribution is an editable install.
+    """
     for path_item in sys.path:
         egg_link = os.path.join(path_item, dist.project_name + '.egg-link')
         if os.path.isfile(egg_link):
@@ -335,6 +372,7 @@ def get_installed_distributions(local_only=True,
                                 include_editables=True,
                                 editables_only=False,
                                 user_only=False):
+    # type: (bool, Container[str], bool, bool, bool) -> List[Distribution]
     """
     Return a list of installed Distribution objects.
 
@@ -344,7 +382,7 @@ def get_installed_distributions(local_only=True,
     ``skip`` argument is an iterable of lower-case project names to
     ignore; defaults to stdlib_pkgs
 
-    If ``editables`` is False, don't report editables.
+    If ``include_editables`` is False, don't report editables.
 
     If ``editables_only`` is True , only report editables.
 
@@ -378,7 +416,8 @@ def get_installed_distributions(local_only=True,
         def user_test(d):
             return True
 
-    return [d for d in pkg_resources.working_set
+    # because of pkg_resources vendoring, mypy cannot find stub in typeshed
+    return [d for d in pkg_resources.working_set  # type: ignore
             if local_test(d) and
             d.key not in skip and
             editable_test(d) and
@@ -388,6 +427,7 @@ def get_installed_distributions(local_only=True,
 
 
 def egg_link_path(dist):
+    # type: (Distribution) -> Optional[str]
     """
     Return the path for the .egg-link file if it exists, otherwise, None.
 
@@ -422,9 +462,11 @@ def egg_link_path(dist):
         egglink = os.path.join(site, dist.project_name) + '.egg-link'
         if os.path.isfile(egglink):
             return egglink
+    return None
 
 
 def dist_location(dist):
+    # type: (Distribution) -> str
     """
     Get the site-packages location of this distribution. Generally
     this is dist.location, except in the case of develop-installed
@@ -438,36 +480,6 @@ def dist_location(dist):
     return dist.location
 
 
-def get_terminal_size():
-    """Returns a tuple (x, y) representing the width(x) and the height(x)
-    in characters of the terminal window."""
-    def ioctl_GWINSZ(fd):
-        try:
-            import fcntl
-            import termios
-            import struct
-            cr = struct.unpack(
-                'hh',
-                fcntl.ioctl(fd, termios.TIOCGWINSZ, '1234')
-            )
-        except:
-            return None
-        if cr == (0, 0):
-            return None
-        return cr
-    cr = ioctl_GWINSZ(0) or ioctl_GWINSZ(1) or ioctl_GWINSZ(2)
-    if not cr:
-        try:
-            fd = os.open(os.ctermid(), os.O_RDONLY)
-            cr = ioctl_GWINSZ(fd)
-            os.close(fd)
-        except:
-            pass
-    if not cr:
-        cr = (os.environ.get('LINES', 25), os.environ.get('COLUMNS', 80))
-    return int(cr[1]), int(cr[0])
-
-
 def current_umask():
     """Get the current umask which involves having to set it temporarily."""
     mask = os.umask(0)
@@ -476,6 +488,7 @@ def current_umask():
 
 
 def unzip_file(filename, location, flatten=True):
+    # type: (str, str, bool) -> None
     """
     Unzip the file (with path `filename`) to the destination `location`.  All
     files are written based on system defaults and umask (i.e. permissions are
@@ -491,7 +504,6 @@ def unzip_file(filename, location, flatten=True):
         leading = has_leading_dir(zip.namelist()) and flatten
         for info in zip.infolist():
             name = info.filename
-            data = zip.read(name)
             fn = name
             if leading:
                 fn = split_leading_dir(name)[1]
@@ -502,9 +514,12 @@ def unzip_file(filename, location, flatten=True):
                 ensure_dir(fn)
             else:
                 ensure_dir(dir)
-                fp = open(fn, 'wb')
+                # Don't use read() to avoid allocating an arbitrarily large
+                # chunk of memory for the file's content
+                fp = zip.open(name)
                 try:
-                    fp.write(data)
+                    with open(fn, 'wb') as destfp:
+                        shutil.copyfileobj(fp, destfp)
                 finally:
                     fp.close()
                     mode = info.external_attr >> 16
@@ -519,6 +534,7 @@ def unzip_file(filename, location, flatten=True):
 
 
 def untar_file(filename, location):
+    # type: (str, str) -> None
     """
     Untar the file (with path `filename`) to the destination `location`.
     All files are written based on system defaults and umask (i.e. permissions
@@ -543,23 +559,21 @@ def untar_file(filename, location):
         mode = 'r:*'
     tar = tarfile.open(filename, mode)
     try:
-        # note: python<=2.5 doesn't seem to know about pax headers, filter them
         leading = has_leading_dir([
             member.name for member in tar.getmembers()
-            if member.name != 'pax_global_header'
         ])
         for member in tar.getmembers():
             fn = member.name
-            if fn == 'pax_global_header':
-                continue
             if leading:
-                fn = split_leading_dir(fn)[1]
+                # https://github.com/python/mypy/issues/1174
+                fn = split_leading_dir(fn)[1]  # type: ignore
             path = os.path.join(location, fn)
             if member.isdir():
                 ensure_dir(path)
             elif member.issym():
                 try:
-                    tar._extract_member(member, path)
+                    # https://github.com/python/typeshed/issues/2673
+                    tar._extract_member(member, path)  # type: ignore
                 except Exception as exc:
                     # Some corrupt tar files seem to produce this
                     # (specifically bad symlinks)
@@ -584,7 +598,8 @@ def untar_file(filename, location):
                     shutil.copyfileobj(fp, destfp)
                 fp.close()
                 # Update the timestamp (useful for cython compiled files)
-                tar.utime(member, path)
+                # https://github.com/python/typeshed/issues/2673
+                tar.utime(member, path)  # type: ignore
                 # member have any execute permissions for user/group/world?
                 if member.mode & 0o111:
                     # make dest file have execute for user/group/world
@@ -594,7 +609,13 @@ def untar_file(filename, location):
         tar.close()
 
 
-def unpack_file(filename, location, content_type, link):
+def unpack_file(
+    filename,  # type: str
+    location,  # type: str
+    content_type,  # type: Optional[str]
+    link  # type: Optional[Link]
+):
+    # type: (...) -> None
     filename = os.path.realpath(filename)
     if (content_type == 'application/zip' or
             filename.lower().endswith(ZIP_EXTENSIONS) or
@@ -627,15 +648,27 @@ def unpack_file(filename, location, content_type, link):
         )
 
 
-def call_subprocess(cmd, show_stdout=True, cwd=None,
-                    on_returncode='raise',
-                    command_desc=None,
-                    extra_environ=None, unset_environ=None, spinner=None):
+def call_subprocess(
+    cmd,  # type: List[str]
+    show_stdout=True,  # type: bool
+    cwd=None,  # type: Optional[str]
+    on_returncode='raise',  # type: str
+    extra_ok_returncodes=None,  # type: Optional[Iterable[int]]
+    command_desc=None,  # type: Optional[str]
+    extra_environ=None,  # type: Optional[Mapping[str, Any]]
+    unset_environ=None,  # type: Optional[Iterable[str]]
+    spinner=None  # type: Optional[SpinnerInterface]
+):
+    # type: (...) -> Optional[Text]
     """
     Args:
+      extra_ok_returncodes: an iterable of integer return codes that are
+        acceptable, in addition to 0. Defaults to None, which means [].
       unset_environ: an iterable of environment variable names to unset
         prior to calling subprocess.Popen().
     """
+    if extra_ok_returncodes is None:
+        extra_ok_returncodes = []
     if unset_environ is None:
         unset_environ = []
     # This function's handling of subprocess output is confusing and I
@@ -678,8 +711,10 @@ def call_subprocess(cmd, show_stdout=True, cwd=None,
         env.pop(name, None)
     try:
         proc = subprocess.Popen(
-            cmd, stderr=subprocess.STDOUT, stdin=None, stdout=stdout,
-            cwd=cwd, env=env)
+            cmd, stderr=subprocess.STDOUT, stdin=subprocess.PIPE,
+            stdout=stdout, cwd=cwd, env=env,
+        )
+        proc.stdin.close()
     except Exception as exc:
         logger.critical(
             "Error %s while executing command %s", exc, command_desc,
@@ -710,7 +745,7 @@ def call_subprocess(cmd, show_stdout=True, cwd=None,
             spinner.finish("error")
         else:
             spinner.finish("done")
-    if proc.returncode:
+    if proc.returncode and proc.returncode not in extra_ok_returncodes:
         if on_returncode == 'raise':
             if (logger.getEffectiveLevel() > std_logging.DEBUG and
                     not show_stdout):
@@ -736,9 +771,11 @@ def call_subprocess(cmd, show_stdout=True, cwd=None,
                              repr(on_returncode))
     if not show_stdout:
         return ''.join(all_output)
+    return None
 
 
 def read_text_file(filename):
+    # type: (str) -> str
     """Return the contents of *filename*.
 
     Try to decode the file contents with utf-8, the preferred system encoding
@@ -753,12 +790,13 @@ def read_text_file(filename):
     encodings = ['utf-8', locale.getpreferredencoding(False), 'latin1']
     for enc in encodings:
         try:
-            data = data.decode(enc)
+            # https://github.com/python/mypy/issues/1174
+            data = data.decode(enc)  # type: ignore
         except UnicodeDecodeError:
             continue
         break
 
-    assert type(data) != bytes  # Latin1 should have worked.
+    assert not isinstance(data, bytes)  # Latin1 should have worked.
     return data
 
 
@@ -826,6 +864,13 @@ def captured_stdout():
     return captured_output('stdout')
 
 
+def captured_stderr():
+    """
+    See captured_stdout().
+    """
+    return captured_output('stderr')
+
+
 class cached_property(object):
     """A property that is only computed once per instance and then replaces
        itself with an ordinary attribute. Deleting the attribute resets the
@@ -846,17 +891,15 @@ class cached_property(object):
         return value
 
 
-def get_installed_version(dist_name, lookup_dirs=None):
+def get_installed_version(dist_name, working_set=None):
     """Get the installed version of dist_name avoiding pkg_resources cache"""
     # Create a requirement that we'll look for inside of setuptools.
     req = pkg_resources.Requirement.parse(dist_name)
 
-    # We want to avoid having this cached, so we need to construct a new
-    # working set each time.
-    if lookup_dirs is None:
+    if working_set is None:
+        # We want to avoid having this cached, so we need to construct a new
+        # working set each time.
         working_set = pkg_resources.WorkingSet()
-    else:
-        working_set = pkg_resources.WorkingSet(lookup_dirs)
 
     # Get the installed distribution from our working set
     dist = working_set.find(req)
@@ -874,6 +917,124 @@ def consume(iterator):
 # Simulates an enum
 def enum(*sequential, **named):
     enums = dict(zip(sequential, range(len(sequential))), **named)
-    reverse = dict((value, key) for key, value in enums.items())
+    reverse = {value: key for key, value in enums.items()}
     enums['reverse_mapping'] = reverse
     return type('Enum', (), enums)
+
+
+def make_vcs_requirement_url(repo_url, rev, project_name, subdir=None):
+    """
+    Return the URL for a VCS requirement.
+
+    Args:
+      repo_url: the remote VCS url, with any needed VCS prefix (e.g. "git+").
+      project_name: the (unescaped) project name.
+    """
+    egg_project_name = pkg_resources.to_filename(project_name)
+    req = '{}@{}#egg={}'.format(repo_url, rev, egg_project_name)
+    if subdir:
+        req += '&subdirectory={}'.format(subdir)
+
+    return req
+
+
+def split_auth_from_netloc(netloc):
+    """
+    Parse out and remove the auth information from a netloc.
+
+    Returns: (netloc, (username, password)).
+    """
+    if '@' not in netloc:
+        return netloc, (None, None)
+
+    # Split from the right because that's how urllib.parse.urlsplit()
+    # behaves if more than one @ is present (which can be checked using
+    # the password attribute of urlsplit()'s return value).
+    auth, netloc = netloc.rsplit('@', 1)
+    if ':' in auth:
+        # Split from the left because that's how urllib.parse.urlsplit()
+        # behaves if more than one : is present (which again can be checked
+        # using the password attribute of the return value)
+        user_pass = auth.split(':', 1)
+    else:
+        user_pass = auth, None
+
+    user_pass = tuple(
+        None if x is None else urllib_unquote(x) for x in user_pass
+    )
+
+    return netloc, user_pass
+
+
+def redact_netloc(netloc):
+    # type: (str) -> str
+    """
+    Replace the password in a netloc with "****", if it exists.
+
+    For example, "user:pass@example.com" returns "user:****@example.com".
+    """
+    netloc, (user, password) = split_auth_from_netloc(netloc)
+    if user is None:
+        return netloc
+    password = '' if password is None else ':****'
+    return '{user}{password}@{netloc}'.format(user=urllib_parse.quote(user),
+                                              password=password,
+                                              netloc=netloc)
+
+
+def _transform_url(url, transform_netloc):
+    purl = urllib_parse.urlsplit(url)
+    netloc = transform_netloc(purl.netloc)
+    # stripped url
+    url_pieces = (
+        purl.scheme, netloc, purl.path, purl.query, purl.fragment
+    )
+    surl = urllib_parse.urlunsplit(url_pieces)
+    return surl
+
+
+def _get_netloc(netloc):
+    return split_auth_from_netloc(netloc)[0]
+
+
+def remove_auth_from_url(url):
+    # type: (str) -> str
+    # Return a copy of url with 'username:password@' removed.
+    # username/pass params are passed to subversion through flags
+    # and are not recognized in the url.
+    return _transform_url(url, _get_netloc)
+
+
+def redact_password_from_url(url):
+    # type: (str) -> str
+    """Replace the password in a given url with ****."""
+    return _transform_url(url, redact_netloc)
+
+
+def protect_pip_from_modification_on_windows(modifying_pip):
+    """Protection of pip.exe from modification on Windows
+
+    On Windows, any operation modifying pip should be run as:
+        python -m pip ...
+    """
+    pip_names = [
+        "pip.exe",
+        "pip{}.exe".format(sys.version_info[0]),
+        "pip{}.{}.exe".format(*sys.version_info[:2])
+    ]
+
+    # See https://github.com/pypa/pip/issues/1299 for more discussion
+    should_show_use_python_msg = (
+        modifying_pip and
+        WINDOWS and
+        os.path.basename(sys.argv[0]) in pip_names
+    )
+
+    if should_show_use_python_msg:
+        new_command = [
+            sys.executable, "-m", "pip"
+        ] + sys.argv[1:]
+        raise CommandError(
+            'To modify pip, please run the following command:\n{}'
+            .format(" ".join(new_command))
+        )

@@ -9,15 +9,15 @@ import sysconfig
 
 from pip._vendor import pkg_resources
 
-from pip._internal.compat import WINDOWS, cache_from_source, uses_pycache
 from pip._internal.exceptions import UninstallationError
 from pip._internal.locations import bin_py, bin_user
+from pip._internal.utils.compat import WINDOWS, cache_from_source, uses_pycache
 from pip._internal.utils.logging import indent_log
 from pip._internal.utils.misc import (
     FakeFile, ask, dist_in_usersite, dist_is_local, egg_link_path, is_local,
-    normalize_path, renames
+    normalize_path, renames,
 )
-from pip._internal.utils.temp_dir import TempDirectory
+from pip._internal.utils.temp_dir import AdjacentTempDirectory
 
 logger = logging.getLogger(__name__)
 
@@ -57,12 +57,12 @@ def _unique(fn):
 @_unique
 def uninstallation_paths(dist):
     """
-    Yield all the uninstallation paths for dist based on RECORD-without-.pyc
+    Yield all the uninstallation paths for dist based on RECORD-without-.py[co]
 
     Yield paths to all the files in RECORD. For each .py file in RECORD, add
-    the .pyc in the same directory.
+    the .pyc and .pyo in the same directory.
 
-    UninstallPathSet.add() takes care of the __pycache__ .pyc.
+    UninstallPathSet.add() takes care of the __pycache__ .py[co].
     """
     r = csv.reader(FakeFile(dist.get_metadata_lines('RECORD')))
     for row in r:
@@ -72,6 +72,8 @@ def uninstallation_paths(dist):
             dn, fn = os.path.split(path)
             base = fn[:-3]
             path = os.path.join(dn, base + '.pyc')
+            yield path
+            path = os.path.join(dn, base + '.pyo')
             yield path
 
 
@@ -84,14 +86,52 @@ def compact(paths):
     sep = os.path.sep
     short_paths = set()
     for path in sorted(paths, key=len):
-        should_add = any(
+        should_skip = any(
             path.startswith(shortpath.rstrip("*")) and
             path[len(shortpath.rstrip("*").rstrip(sep))] == sep
             for shortpath in short_paths
         )
-        if not should_add:
+        if not should_skip:
             short_paths.add(path)
     return short_paths
+
+
+def compress_for_rename(paths):
+    """Returns a set containing the paths that need to be renamed.
+
+    This set may include directories when the original sequence of paths
+    included every file on disk.
+    """
+    case_map = dict((os.path.normcase(p), p) for p in paths)
+    remaining = set(case_map)
+    unchecked = sorted(set(os.path.split(p)[0]
+                           for p in case_map.values()), key=len)
+    wildcards = set()
+
+    def norm_join(*a):
+        return os.path.normcase(os.path.join(*a))
+
+    for root in unchecked:
+        if any(os.path.normcase(root).startswith(w)
+               for w in wildcards):
+            # This directory has already been handled.
+            continue
+
+        all_files = set()
+        all_subdirs = set()
+        for dirname, subdirs, files in os.walk(root):
+            all_subdirs.update(norm_join(root, dirname, d)
+                               for d in subdirs)
+            all_files.update(norm_join(root, dirname, f)
+                             for f in files)
+        # If all the files we found are in our remaining set of files to
+        # remove, then remove them from the latter set and add a wildcard
+        # for the directory.
+        if len(all_files - remaining) == 0:
+            remaining.difference_update(all_files)
+            wildcards.add(root + os.sep)
+
+    return set(map(case_map.__getitem__, remaining)) | wildcards
 
 
 def compress_for_output_listing(paths):
@@ -118,6 +158,8 @@ def compress_for_output_listing(paths):
             folders.add(os.path.dirname(path))
         files.add(path)
 
+    _normcased_files = set(map(os.path.normcase, files))
+
     folders = compact(folders)
 
     # This walks the tree using os.walk to not miss extra folders
@@ -128,8 +170,9 @@ def compress_for_output_listing(paths):
                 if fname.endswith(".pyc"):
                     continue
 
-                file_ = os.path.normcase(os.path.join(dirpath, fname))
-                if os.path.isfile(file_) and file_ not in files:
+                file_ = os.path.join(dirpath, fname)
+                if (os.path.isfile(file_) and
+                        os.path.normcase(file_) not in _normcased_files):
                     # We are skipping this file. Add it to the set.
                     will_skip.add(file_)
 
@@ -148,7 +191,7 @@ class UninstallPathSet(object):
         self._refuse = set()
         self.pth = {}
         self.dist = dist
-        self.save_dir = TempDirectory(kind="uninstall")
+        self._save_dirs = []
         self._moved_paths = []
 
     def _permitted(self, path):
@@ -188,9 +231,17 @@ class UninstallPathSet(object):
             self._refuse.add(pth_file)
 
     def _stash(self, path):
-        return os.path.join(
-            self.save_dir.path, os.path.splitdrive(path)[1].lstrip(os.path.sep)
-        )
+        best = None
+        for save_dir in self._save_dirs:
+            if not path.startswith(save_dir.original + os.sep):
+                continue
+            if not best or len(save_dir.original) > len(best.original):
+                best = save_dir
+        if best is None:
+            best = AdjacentTempDirectory(os.path.dirname(path))
+            best.create()
+            self._save_dirs.append(best)
+        return os.path.join(best.path, os.path.relpath(path, best.original))
 
     def remove(self, auto_confirm=False, verbose=False):
         """Remove paths in ``self.paths`` with confirmation (unless
@@ -210,12 +261,10 @@ class UninstallPathSet(object):
 
         with indent_log():
             if auto_confirm or self._allowed_to_proceed(verbose):
-                self.save_dir.create()
-
-                for path in sorted(compact(self.paths)):
+                for path in sorted(compact(compress_for_rename(self.paths))):
                     new_path = self._stash(path)
                     logger.debug('Removing file or directory %s', path)
-                    self._moved_paths.append(path)
+                    self._moved_paths.append((path, new_path))
                     renames(path, new_path)
                 for pth in self.pth.values():
                     pth.remove()
@@ -246,20 +295,21 @@ class UninstallPathSet(object):
         _display('Would remove:', will_remove)
         _display('Would not remove (might be manually added):', will_skip)
         _display('Would not remove (outside of prefix):', self._refuse)
+        if verbose:
+            _display('Will actually move:', compress_for_rename(self.paths))
 
         return ask('Proceed (y/n)? ', ('y', 'n')) == 'y'
 
     def rollback(self):
         """Rollback the changes previously made by remove()."""
-        if self.save_dir.path is None:
+        if not self._save_dirs:
             logger.error(
                 "Can't roll back %s; was not uninstalled",
                 self.dist.project_name,
             )
             return False
         logger.info('Rolling back uninstall of %s', self.dist.project_name)
-        for path in self._moved_paths:
-            tmp_path = self._stash(path)
+        for path, tmp_path in self._moved_paths:
             logger.debug('Replacing %s', path)
             renames(tmp_path, path)
         for pth in self.pth.values():
@@ -267,7 +317,8 @@ class UninstallPathSet(object):
 
     def commit(self):
         """Remove temporary save dir: rollback will no longer be possible."""
-        self.save_dir.cleanup()
+        for save_dir in self._save_dirs:
+            save_dir.cleanup()
         self._moved_paths = []
 
     @classmethod
@@ -294,7 +345,7 @@ class UninstallPathSet(object):
 
         paths_to_remove = cls(dist)
         develop_egg_link = egg_link_path(dist)
-        develop_egg_link_egg_info = '{0}.egg-info'.format(
+        develop_egg_link_egg_info = '{}.egg-info'.format(
             pkg_resources.to_filename(dist.project_name))
         egg_info_exists = dist.egg_info and os.path.exists(dist.egg_info)
         # Special case for distutils installed package
@@ -371,7 +422,8 @@ class UninstallPathSet(object):
         else:
             logger.debug(
                 'Not sure how to uninstall: %s - Check: %s',
-                dist, dist.location)
+                dist, dist.location,
+            )
 
         # find distutils scripts= scripts
         if dist.has_metadata('scripts') and dist.metadata_isdir('scripts'):

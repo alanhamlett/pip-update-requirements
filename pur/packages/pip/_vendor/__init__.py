@@ -74,6 +74,7 @@ if DEBUNDLED:
     vendored("packaging")
     vendored("packaging.version")
     vendored("packaging.specifiers")
+    vendored("pep517")
     vendored("pkg_resources")
     vendored("progress")
     vendored("pytoml")
@@ -107,3 +108,4 @@ if DEBUNDLED:
     vendored("requests.packages.urllib3.util.ssl_")
     vendored("requests.packages.urllib3.util.timeout")
     vendored("requests.packages.urllib3.util.url")
+    vendored("urllib3")
