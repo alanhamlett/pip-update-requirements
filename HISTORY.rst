@@ -3,6 +3,13 @@ History
 -------
 
 
+5.2.2 (2019-04-10)
+++++++++++++++++++
+
+- Support importing as module.
+  `#24 <https://github.com/alanhamlett/pip-update-requirements/issues/24>`_
+
+
 5.2.1 (2018-11-13)
 ++++++++++++++++++
 
