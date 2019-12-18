@@ -68,6 +68,8 @@ PUR_GLOBAL_UPDATED = 0
               help='Prevents updating nested requirements files.')
 @click.option('-s', '--skip', type=click.STRING, help='Comma separated list ' +
               'of packages to skip updating.')
+@click.option('--index-url', type=click.STRING, help='Comma separated list ' +
+              'of PyPI index urls.', default='https://pypi.org/simple')
 @click.option('--only', type=click.STRING, help='Comma separated list of ' +
               'packages. Only these packages will be updated.')
 @click.option('-m', '--minor', type=click.STRING, help='Comma separated ' +
@@ -117,6 +119,7 @@ def pur(**options):
         dry_run=options['dry_run'],
         no_recursive=options['no_recursive'],
         echo=options['echo'],
+        index_url=options["index_url"].split(","),
     )
 
     if not options['dry_run']:
@@ -131,7 +134,7 @@ def pur(**options):
 def update_requirements(input_file=None, output_file=None, force=False,
                         interactive=False, skip=[], only=[], minor=[],
                         patch=[], pre=[], dry_run=False,
-                        no_recursive=False, echo=False):
+                        no_recursive=False, echo=False, index_url=[]):
     """Update a requirements file.
 
     Returns a dict of package update info.
@@ -152,6 +155,7 @@ def update_requirements(input_file=None, output_file=None, force=False,
                          minor or major.
     :param pre:          List of packages to allow updating to pre-release
                          versions.
+    :param index_url:   List of PyPI index urls.
     """
 
     obuffer = StringIO()
@@ -161,7 +165,7 @@ def update_requirements(input_file=None, output_file=None, force=False,
     _patch_pip(obuffer, updates, input_file=input_file, output_file=output_file,
               force=force, interactive=interactive, skip=skip, only=only,
               minor=minor, patch=patch, pre=pre, dry_run=dry_run,
-              no_recursive=no_recursive, echo=echo)
+              no_recursive=no_recursive, echo=echo, index_url=index_url)
 
     _internal_update_requirements(obuffer, updates,
                                   input_file=input_file,
@@ -175,7 +179,9 @@ def update_requirements(input_file=None, output_file=None, force=False,
                                   interactive=interactive,
                                   dry_run=dry_run,
                                   no_recursive=no_recursive,
-                                  echo=echo)
+                                  echo=echo,
+                                  index_url=index_url,
+                                  )
 
     if not dry_run:
         if not output_file:
@@ -188,7 +194,7 @@ def update_requirements(input_file=None, output_file=None, force=False,
     return updates
 
 
-def _internal_update_requirements(obuffer, updates, input_file=None,
+def _internal_update_requirements(obuffer, updates, index_url, input_file=None,
                                   output_file=None, force=False,
                                   interactive=False, skip=[], only=[],
                                   minor=[], patch=[], pre=[],
@@ -201,7 +207,7 @@ def _internal_update_requirements(obuffer, updates, input_file=None,
     try:
         requirements = _get_requirements_and_latest(input_file, force=force,
                                                     minor=minor, patch=patch,
-                                                    pre=pre)
+                                                    pre=pre, index_url=index_url)
 
         stop = False
         for line, req, spec_ver, latest_ver in requirements:
@@ -299,6 +305,7 @@ def _patch_pip(obuffer, updates, **options):
                         dry_run=options['dry_run'],
                         no_recursive=options['no_recursive'],
                         echo=options['echo'],
+                        index_url=options['index_url']
                     )
                     if not options['dry_run']:
                         if options['output_file']:
@@ -311,7 +318,7 @@ def _patch_pip(obuffer, updates, **options):
     req_file.parse_requirements = patched_parse_requirements
 
 
-def _get_requirements_and_latest(filename, force=False, minor=[], patch=[],
+def _get_requirements_and_latest(filename, index_url, force=False, minor=[], patch=[],
                                  pre=[]):
     """Parse a requirements file and get latest version for each requirement.
 
@@ -330,7 +337,7 @@ def _get_requirements_and_latest(filename, force=False, minor=[], patch=[],
     """
     session = PipSession()
     finder = PackageFinder(
-        session=session, find_links=[], index_urls=[PyPI.simple_url])
+        session=session, find_links=[], index_urls=index_url)
 
     _, content = get_file_content(filename, session=session)
     for line_number, line, orig_line in yield_lines(content):
