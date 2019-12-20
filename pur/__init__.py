@@ -120,7 +120,7 @@ def pur(**options):
         dry_run=options['dry_run'],
         no_recursive=options['no_recursive'],
         echo=options['echo'],
-        index_urls=options['index_urls'],
+        index_urls=options['index_url'],
     )
 
     if not options['dry_run']:
@@ -135,7 +135,7 @@ def pur(**options):
 def update_requirements(input_file=None, output_file=None, force=False,
                         interactive=False, skip=[], only=[], minor=[],
                         patch=[], pre=[], dry_run=False,
-                        no_recursive=False, echo=False, index_url=[]):
+                        no_recursive=False, echo=False, index_urls=[]):
     """Update a requirements file.
 
     Returns a dict of package update info.
@@ -156,7 +156,7 @@ def update_requirements(input_file=None, output_file=None, force=False,
                          minor or major.
     :param pre:          List of packages to allow updating to pre-release
                          versions.
-    :param index_url:   List of PyPI index urls.
+    :param index_urls:   List of PyPI index urls.
     """
 
     obuffer = StringIO()
@@ -166,7 +166,7 @@ def update_requirements(input_file=None, output_file=None, force=False,
     _patch_pip(obuffer, updates, input_file=input_file, output_file=output_file,
               force=force, interactive=interactive, skip=skip, only=only,
               minor=minor, patch=patch, pre=pre, dry_run=dry_run,
-              no_recursive=no_recursive, echo=echo, index_url=index_url)
+              no_recursive=no_recursive, echo=echo, index_urls=index_urls)
 
     _internal_update_requirements(obuffer, updates,
                                   input_file=input_file,
@@ -181,7 +181,7 @@ def update_requirements(input_file=None, output_file=None, force=False,
                                   dry_run=dry_run,
                                   no_recursive=no_recursive,
                                   echo=echo,
-                                  index_url=index_url,
+                                  index_urls=index_urls,
                                   )
 
     if not dry_run:
