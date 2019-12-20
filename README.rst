@@ -85,6 +85,8 @@ Options
                          requirements.txt file.
 -n, --no-recursive       Prevents updating nested requirements files.
 -s, --skip TEXT          Comma separated list of packages to skip updating.
+--index-url TEXT         Base URL of the Python Package Index. Can be
+                         provided multiple times for extra index urls.
 --only TEXT              Comma separated list of packages. Only these
                          packages will be updated.
 -m, --minor TEXT         Comma separated list of packages to only update
