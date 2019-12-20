@@ -14,6 +14,9 @@
     :target: https://pypi.python.org/pypi/pur
     :alt: Supported Python Versions
 
+.. image:: https://wakatime.com/badge/github/alanhamlett/pip-update-requirements.svg
+    :target: https://wakatime.com/badge/github/alanhamlett/pip-update-requirements
+
 
 pip-update-requirements
 =======================
