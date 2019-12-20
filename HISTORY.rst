@@ -3,6 +3,14 @@ History
 -------
 
 
+5.3.0 (2019-12-20)
+++++++++++++++++++
+
+- New argument --index-url to define pip index url and extra index urls.
+  `#25 <https://github.com/alanhamlett/pip-update-requirements/issues/25>`_
+- Support for Python 3.7.
+
+
 5.2.2 (2019-04-10)
 ++++++++++++++++++
 
