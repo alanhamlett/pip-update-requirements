@@ -68,8 +68,9 @@ PUR_GLOBAL_UPDATED = 0
               help='Prevents updating nested requirements files.')
 @click.option('-s', '--skip', type=click.STRING, help='Comma separated list ' +
               'of packages to skip updating.')
-@click.option('--index-url', type=click.STRING, help='Comma separated list ' +
-              'of PyPI index urls.', default='https://pypi.org/simple')
+@click.option('--index-url', type=click.STRING, multiple=True, help='Base ' +
+              'URL of the Python Package Index. Can be provided multiple ' +
+              'times for extra index urls.')
 @click.option('--only', type=click.STRING, help='Comma separated list of ' +
               'packages. Only these packages will be updated.')
 @click.option('-m', '--minor', type=click.STRING, help='Comma separated ' +
@@ -119,7 +120,7 @@ def pur(**options):
         dry_run=options['dry_run'],
         no_recursive=options['no_recursive'],
         echo=options['echo'],
-        index_url=options["index_url"].split(","),
+        index_urls=options['index_urls'],
     )
 
     if not options['dry_run']:
@@ -194,12 +195,12 @@ def update_requirements(input_file=None, output_file=None, force=False,
     return updates
 
 
-def _internal_update_requirements(obuffer, updates, index_url, input_file=None,
+def _internal_update_requirements(obuffer, updates, input_file=None,
                                   output_file=None, force=False,
                                   interactive=False, skip=[], only=[],
                                   minor=[], patch=[], pre=[],
                                   dry_run=False, no_recursive=False,
-                                  echo=False):
+                                  index_urls=[], echo=False):
     global PUR_GLOBAL_UPDATED
 
     updated = 0
@@ -207,7 +208,8 @@ def _internal_update_requirements(obuffer, updates, index_url, input_file=None,
     try:
         requirements = _get_requirements_and_latest(input_file, force=force,
                                                     minor=minor, patch=patch,
-                                                    pre=pre, index_url=index_url)
+                                                    pre=pre,
+                                                    index_urls=index_urls)
 
         stop = False
         for line, req, spec_ver, latest_ver in requirements:
@@ -305,7 +307,7 @@ def _patch_pip(obuffer, updates, **options):
                         dry_run=options['dry_run'],
                         no_recursive=options['no_recursive'],
                         echo=options['echo'],
-                        index_url=options['index_url']
+                        index_urls=options['index_urls']
                     )
                     if not options['dry_run']:
                         if options['output_file']:
@@ -318,26 +320,35 @@ def _patch_pip(obuffer, updates, **options):
     req_file.parse_requirements = patched_parse_requirements
 
 
-def _get_requirements_and_latest(filename, index_url, force=False, minor=[], patch=[],
-                                 pre=[]):
+def _get_requirements_and_latest(
+        filename,
+        force=False,
+        minor=[],
+        patch=[],
+        pre=[],
+        index_urls=[]):
     """Parse a requirements file and get latest version for each requirement.
 
     Yields a tuple of (original line, InstallRequirement instance,
     spec_versions, latest_version).
 
-    :param filename: Path to a requirements.txt file.
-    :param force:    Force getting latest version even for packages without
-                     a version specified.
-    :param minor:    List of packages to only update minor and patch versions,
-                     never major.
-    :param patch:    List of packages to only update patch versions, never
-                     minor or major.
-    :param pre:      List of packages to allow updating to pre-release
-                     versions.
+    :param filename:   Path to a requirements.txt file.
+    :param force:      Force getting latest version even for packages without
+                       a version specified.
+    :param minor:      List of packages to only update minor and patch versions,
+                       never major.
+    :param patch:      List of packages to only update patch versions, never
+                       minor or major.
+    :param pre:        List of packages to allow updating to pre-release
+                       versions.
+    :param index_urls: List of base URLs of the Python Package Index.
     """
     session = PipSession()
     finder = PackageFinder(
-        session=session, find_links=[], index_urls=index_url)
+        session=session,
+        find_links=[],
+        index_urls=index_urls or [PyPI.simple_url],
+    )
 
     _, content = get_file_content(filename, session=session)
     for line_number, line, orig_line in yield_lines(content):
