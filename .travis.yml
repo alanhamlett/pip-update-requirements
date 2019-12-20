@@ -1,17 +1,15 @@
 language: python
-python:
-    - "2.7"
-    - "3.4"
-    - "3.5"
-    - "3.6"
-# command to install dependencies
+matrix:
+  include:
+    - python: 2.7
+    - python: 3.4
+    - python: 3.5
+    - python: 3.6
+    - python: 3.7
+      sudo: true
 install:
     - travis_retry pip install -r dev-requirements.txt
     - travis_retry pip install coveralls
-# use new travis-ci container-based infrastructure
-sudo: false
-# command to run tests
 script: nosetests
-# command to run after tests
 after_success:
     - coveralls
