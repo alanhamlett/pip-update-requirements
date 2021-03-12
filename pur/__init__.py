@@ -139,7 +139,8 @@ def pur(**options):
 def update_requirements(input_file=None, output_file=None, force=False,
                         interactive=False, skip=[], only=[], minor=[],
                         patch=[], pre=[], dry_run=False,
-                        no_recursive=False, echo=False, index_urls=[], verify=None,):
+                        no_recursive=False, echo=False, index_urls=[],
+                        verify=None):
     """Update a requirements file.
 
     Returns a dict of package update info.
@@ -161,9 +162,10 @@ def update_requirements(input_file=None, output_file=None, force=False,
     :param pre:          List of packages to allow updating to pre-release
                          versions.
     :param index_urls:   List of PyPI index urls.
-    :param verify: (optional) Either a boolean, in which case it controls whether we verify
-            the server's TLS certificate, or a string, in which case it must be a path
-            to a CA bundle to use. Defaults to ``True``.
+    :param verify:       Either a boolean, in which case it controls whether we
+                         verify the server's TLS certificate, or a string, in
+                         which case it must be a path to a CA bundle to use.
+                         Defaults to None.
     """
 
     obuffer = StringIO()
@@ -173,7 +175,8 @@ def update_requirements(input_file=None, output_file=None, force=False,
     _patch_pip(obuffer, updates, input_file=input_file, output_file=output_file,
               force=force, interactive=interactive, skip=skip, only=only,
               minor=minor, patch=patch, pre=pre, dry_run=dry_run,
-              no_recursive=no_recursive, echo=echo, index_urls=index_urls)
+              no_recursive=no_recursive, echo=echo, index_urls=index_urls,
+              verify=verify)
 
     _internal_update_requirements(obuffer, updates,
                                   input_file=input_file,
