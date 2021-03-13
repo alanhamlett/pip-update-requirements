@@ -356,9 +356,10 @@ def _get_requirements_and_latest(
     :param pre:        List of packages to allow updating to pre-release
                        versions.
     :param index_urls: List of base URLs of the Python Package Index.
-    :param verify: (optional) Either a boolean, in which case it controls whether we verify
-            the server's TLS certificate, or a string, in which case it must be a path
-            to a CA bundle to use. Defaults to ``True``.
+    :param verify:     Either a boolean, in which case it controls whether we
+                       verify the server's TLS certificate, or a string, in
+                       which case it must be a path to a CA bundle to use.
+                       Defaults to None.
     """
     session = PipSession()
     if verify:
