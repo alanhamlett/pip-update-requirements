@@ -981,6 +981,37 @@ class PurTestCase(utils.TestCase):
                     ('http://pypi.example.com', 'http://pypi2.example.com')
                 )
 
+    def test_updates_from_alt_index_url_with_verify_command_line_arg(self):
+        requirements = 'tests/samples/requirements.txt'
+        tempdir = tempfile.mkdtemp()
+        tmpfile = os.path.join(tempdir, 'requirements.txt')
+        shutil.copy(requirements, tmpfile)
+        args = ['--index-url', 'https://pypi.internal', '--verify', '/path/to/cert/file', '-r', tmpfile]
+
+        class PackageFinderSpy(PackageFinder):
+
+            _spy = None
+
+            def __init__(self, *args, **kwargs):
+                super(PackageFinderSpy, self).__init__(*args, **kwargs)
+                PackageFinderSpy._spy = self
+
+        with utils.mock.patch('pur.PackageFinder', wraps=PackageFinderSpy) as mock_finder:
+            with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+
+                project = 'flask'
+                version = '12.1'
+                link = Link('')
+                candidate = InstallationCandidate(project, version, link)
+                mock_find_all_candidates.return_value = [candidate]
+
+                self.runner.invoke(pur, args)
+
+                self.assertTrue(mock_finder.called)
+
+                self.assertEqual(PackageFinderSpy._spy.index_urls, ('https://pypi.internal', ))
+                self.assertEqual(PackageFinderSpy._spy.session.verify, '/path/to/cert/file')
+
     def test_interactive_choice_default(self):
         tempdir = tempfile.mkdtemp()
         requirements = os.path.join(tempdir, 'requirements.txt')

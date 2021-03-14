@@ -71,6 +71,9 @@ PUR_GLOBAL_UPDATED = 0
 @click.option('--index-url', type=click.STRING, multiple=True, help='Base ' +
               'URL of the Python Package Index. Can be provided multiple ' +
               'times for extra index urls.')
+@click.option('--verify', type=click.STRING, default=None, help='Base ' +
+              'Either a boolean, in which case it controls whether we verify  ' +
+              'the servers TLS certificate.')
 @click.option('--only', type=click.STRING, help='Comma separated list of ' +
               'packages. Only these packages will be updated.')
 @click.option('-m', '--minor', type=click.STRING, help='Comma separated ' +
@@ -121,6 +124,7 @@ def pur(**options):
         no_recursive=options['no_recursive'],
         echo=options['echo'],
         index_urls=options['index_url'],
+        verify=options['verify'],
     )
 
     if not options['dry_run']:
@@ -135,7 +139,8 @@ def pur(**options):
 def update_requirements(input_file=None, output_file=None, force=False,
                         interactive=False, skip=[], only=[], minor=[],
                         patch=[], pre=[], dry_run=False,
-                        no_recursive=False, echo=False, index_urls=[]):
+                        no_recursive=False, echo=False, index_urls=[],
+                        verify=None):
     """Update a requirements file.
 
     Returns a dict of package update info.
@@ -157,6 +162,10 @@ def update_requirements(input_file=None, output_file=None, force=False,
     :param pre:          List of packages to allow updating to pre-release
                          versions.
     :param index_urls:   List of PyPI index urls.
+    :param verify:       Either a boolean, in which case it controls whether we
+                         verify the server's TLS certificate, or a string, in
+                         which case it must be a path to a CA bundle to use.
+                         Defaults to None.
     """
 
     obuffer = StringIO()
@@ -166,7 +175,8 @@ def update_requirements(input_file=None, output_file=None, force=False,
     _patch_pip(obuffer, updates, input_file=input_file, output_file=output_file,
               force=force, interactive=interactive, skip=skip, only=only,
               minor=minor, patch=patch, pre=pre, dry_run=dry_run,
-              no_recursive=no_recursive, echo=echo, index_urls=index_urls)
+              no_recursive=no_recursive, echo=echo, index_urls=index_urls,
+              verify=verify)
 
     _internal_update_requirements(obuffer, updates,
                                   input_file=input_file,
@@ -182,6 +192,7 @@ def update_requirements(input_file=None, output_file=None, force=False,
                                   no_recursive=no_recursive,
                                   echo=echo,
                                   index_urls=index_urls,
+                                  verify=verify,
                                   )
 
     if not dry_run:
@@ -200,7 +211,7 @@ def _internal_update_requirements(obuffer, updates, input_file=None,
                                   interactive=False, skip=[], only=[],
                                   minor=[], patch=[], pre=[],
                                   dry_run=False, no_recursive=False,
-                                  index_urls=[], echo=False):
+                                  index_urls=[], echo=False, verify=None):
     global PUR_GLOBAL_UPDATED
 
     updated = 0
@@ -209,7 +220,8 @@ def _internal_update_requirements(obuffer, updates, input_file=None,
         requirements = _get_requirements_and_latest(input_file, force=force,
                                                     minor=minor, patch=patch,
                                                     pre=pre,
-                                                    index_urls=index_urls)
+                                                    index_urls=index_urls,
+                                                    verify=verify)
 
         stop = False
         for line, req, spec_ver, latest_ver in requirements:
@@ -307,7 +319,8 @@ def _patch_pip(obuffer, updates, **options):
                         dry_run=options['dry_run'],
                         no_recursive=options['no_recursive'],
                         echo=options['echo'],
-                        index_urls=options['index_urls']
+                        index_urls=options['index_urls'],
+                        verify=options['verify'],
                     )
                     if not options['dry_run']:
                         if options['output_file']:
@@ -326,7 +339,8 @@ def _get_requirements_and_latest(
         minor=[],
         patch=[],
         pre=[],
-        index_urls=[]):
+        index_urls=[],
+        verify=None):
     """Parse a requirements file and get latest version for each requirement.
 
     Yields a tuple of (original line, InstallRequirement instance,
@@ -342,8 +356,14 @@ def _get_requirements_and_latest(
     :param pre:        List of packages to allow updating to pre-release
                        versions.
     :param index_urls: List of base URLs of the Python Package Index.
+    :param verify:     Either a boolean, in which case it controls whether we
+                       verify the server's TLS certificate, or a string, in
+                       which case it must be a path to a CA bundle to use.
+                       Defaults to None.
     """
     session = PipSession()
+    if verify:
+        session.verify = verify
     finder = PackageFinder(
         session=session,
         find_links=[],
