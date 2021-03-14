@@ -81,7 +81,7 @@ class PathOrBool(click.Path):
 @click.option('--index-url', type=click.STRING, multiple=True, help='Base ' +
               'URL of the Python Package Index. Can be provided multiple ' +
               'times for extra index urls.')
-@click.option('--verify', type=PathOrBool, default='true', help='Either a ' +
+@click.option('--verify', type=PathOrBool(), default='true', help='Either a ' +
               'boolean true/false, in which case it controls whether we ' +
               'verify the server\'s TLS certificate, or a string, in which ' +
               'case it must be a path to a CA certs bundle. Defaults to True.')
