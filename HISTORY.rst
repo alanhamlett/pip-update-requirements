@@ -3,6 +3,15 @@ History
 -------
 
 
+5.4.0 (2021-03-14)
+++++++++++++++++++
+
+- New argument --verify to use custom CA Cert bundle, or disable verification.
+  `#33 <https://github.com/alanhamlett/pip-update-requirements/pull/33>`_
+- Support for Python 3.8 and 3.9.
+  `#34 <https://github.com/alanhamlett/pip-update-requirements/pull/34>`_
+
+
 5.3.0 (2019-12-20)
 ++++++++++++++++++
 
