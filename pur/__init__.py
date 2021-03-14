@@ -49,6 +49,16 @@ from .utils import (ExitCodeException, can_check_version, should_update,
 PUR_GLOBAL_UPDATED = 0
 
 
+class PathOrBool(click.Path):
+    def convert(self, value, param, ctx):
+        if value.lower() == 'true':
+            return True
+        elif value.lower() == 'false':
+            return False
+        else:
+            return super(PathOrBool, self).convert(value, param, ctx)
+
+
 @click.command()
 @click.option('-r', '--requirement', type=click.Path(),
               help='The requirements.txt file to update; Defaults to using ' +
@@ -71,9 +81,10 @@ PUR_GLOBAL_UPDATED = 0
 @click.option('--index-url', type=click.STRING, multiple=True, help='Base ' +
               'URL of the Python Package Index. Can be provided multiple ' +
               'times for extra index urls.')
-@click.option('--verify', type=click.STRING, default=None, help='Base ' +
-              'Either a boolean, in which case it controls whether we verify  ' +
-              'the servers TLS certificate.')
+@click.option('--verify', type=PathOrBool, default='true', help='Either a ' +
+              'boolean true/false, in which case it controls whether we ' +
+              'verify the server\'s TLS certificate, or a string, in which ' +
+              'case it must be a path to a CA certs bundle. Defaults to True.')
 @click.option('--only', type=click.STRING, help='Comma separated list of ' +
               'packages. Only these packages will be updated.')
 @click.option('-m', '--minor', type=click.STRING, help='Comma separated ' +
@@ -140,7 +151,7 @@ def update_requirements(input_file=None, output_file=None, force=False,
                         interactive=False, skip=[], only=[], minor=[],
                         patch=[], pre=[], dry_run=False,
                         no_recursive=False, echo=False, index_urls=[],
-                        verify=None):
+                        verify=True):
     """Update a requirements file.
 
     Returns a dict of package update info.
@@ -165,7 +176,7 @@ def update_requirements(input_file=None, output_file=None, force=False,
     :param verify:       Either a boolean, in which case it controls whether we
                          verify the server's TLS certificate, or a string, in
                          which case it must be a path to a CA bundle to use.
-                         Defaults to None.
+                         Defaults to True.
     """
 
     obuffer = StringIO()
@@ -340,7 +351,7 @@ def _get_requirements_and_latest(
         patch=[],
         pre=[],
         index_urls=[],
-        verify=None):
+        verify=True):
     """Parse a requirements file and get latest version for each requirement.
 
     Yields a tuple of (original line, InstallRequirement instance,
@@ -356,10 +367,10 @@ def _get_requirements_and_latest(
     :param pre:        List of packages to allow updating to pre-release
                        versions.
     :param index_urls: List of base URLs of the Python Package Index.
-    :param verify:     Either a boolean, in which case it controls whether we
-                       verify the server's TLS certificate, or a string, in
-                       which case it must be a path to a CA bundle to use.
-                       Defaults to None.
+    :param verify:     Either a boolean true/false, in which case it controls
+                       whether we verify the server's TLS certificate, or a
+                       string, in which case it must be a path to a CA certs
+                       bundle. Defaults to True.
     """
     session = PipSession()
     if verify:
