@@ -75,55 +75,55 @@ You can also use Pur directly from Python::
 Options
 -------
 
-  -r, --requirement PATH   The requirements.txt file to update; Defaults to
-                           using requirements.txt from the current directory
-                           if it exist.
+-r, --requirement PATH   The requirements.txt file to update; Defaults to
+                         using requirements.txt from the current directory
+                         if it exist.
 
-  -o, --output PATH        Output updated packages to this file; Defaults to
-                           overwriting the input requirements.txt file.
+-o, --output PATH        Output updated packages to this file; Defaults to
+                         overwriting the input requirements.txt file.
 
-  -i, --interactive        Interactively prompts before updating each package.
-  -f, --force              Force updating packages even when a package has no
-                           version specified in the input requirements.txt
-                           file.
+-i, --interactive        Interactively prompts before updating each package.
+-f, --force              Force updating packages even when a package has no
+                         version specified in the input requirements.txt
+                         file.
 
-  -d, --dry-run            Output changes to STDOUT instead of overwriting the
-                           requirements.txt file.
+-d, --dry-run            Output changes to STDOUT instead of overwriting the
+                         requirements.txt file.
 
-  -n, --no-recursive       Prevents updating nested requirements files.
-  -s, --skip TEXT          Comma separated list of packages to skip updating.
-  --index-url TEXT         Base URL of the Python Package Index. Can be
-                           provided multiple times for extra index urls.
+-n, --no-recursive       Prevents updating nested requirements files.
+-s, --skip TEXT          Comma separated list of packages to skip updating.
+--index-url TEXT         Base URL of the Python Package Index. Can be
+                         provided multiple times for extra index urls.
 
-  --verify PATH            Either a boolean true/false, in which case it
-                           controls whether we verify the server's TLS
-                           certificate, or a string, in which case it must be
-                           a path to a CA certs bundle. Defaults to True.
+--verify PATH            Either a boolean true/false, in which case it
+                         controls whether we verify the server's TLS
+                         certificate, or a string, in which case it must be
+                         a path to a CA certs bundle. Defaults to True.
 
-  --only TEXT              Comma separated list of packages. Only these
-                           packages will be updated.
+--only TEXT              Comma separated list of packages. Only these
+                         packages will be updated.
 
-  -m, --minor TEXT         Comma separated list of packages to only update
-                           minor versions, never major. Use "*" to limit every
-                           package to minor version updates.
+-m, --minor TEXT         Comma separated list of packages to only update
+                         minor versions, never major. Use "*" to limit every
+                         package to minor version updates.
 
-  -p, --patch TEXT         Comma separated list of packages to only update
-                           patch versions, never major or minor. Use "*" to
-                           limit every package to patch version updates.
+-p, --patch TEXT         Comma separated list of packages to only update
+                         patch versions, never major or minor. Use "*" to
+                         limit every package to patch version updates.
 
-  --pre TEXT               Comma separated list of packages to allow updating
-                           to pre-release versions. Use "*" to allow all
-                           packages to be updated to pre-release versions. By
-                           default packages are only updated to stable
-                           versions.
+--pre TEXT               Comma separated list of packages to allow updating
+                         to pre-release versions. Use "*" to allow all
+                         packages to be updated to pre-release versions. By
+                         default packages are only updated to stable
+                         versions.
 
-  -z, --nonzero-exit-code  Exit with status l0 when all packages up-to-date,
-                           11 when some packages were updated. Defaults to
-                           exit status zero on success and non-zero on
-                           failure.
+-z, --nonzero-exit-code  Exit with status l0 when all packages up-to-date,
+                         11 when some packages were updated. Defaults to
+                         exit status zero on success and non-zero on
+                         failure.
 
-  --version                Show the version and exit.
-  --help                   Show this message and exit.
+--version                Show the version and exit.
+--help                   Show this message and exit.
 
 
 Contributing
