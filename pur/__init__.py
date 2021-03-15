@@ -100,7 +100,7 @@ class PathOrBool(click.Path):
               'versions. By default packages are only updated to stable ' +
               'versions.')
 @click.option('-z', '--nonzero-exit-code', is_flag=True, default=False,
-              help='Exit with status l0 when all packages up-to-date, 11 ' +
+              help='Exit with status 10 when all packages up-to-date, 11 ' +
               'when some packages were updated. Defaults to exit status zero ' +
               'on success and non-zero on failure.')
 @click.version_option(__version__)
