@@ -107,7 +107,7 @@ Options
                          packages to be updated to pre-release versions. By
                          default packages are only updated to stable
                          versions.
--z, --nonzero-exit-code  Exit with status l0 when all packages up-to-date,
+-z, --nonzero-exit-code  Exit with status 10 when all packages up-to-date,
                          11 when some packages were updated. Defaults to
                          exit status zero on success and non-zero on
                          failure.
