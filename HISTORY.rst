@@ -3,6 +3,13 @@ History
 -------
 
 
+5.4.1 (2021-05-15)
+++++++++++++++++++
+
+- Click dropped support for py35 and lower in v8.0.0, so pin version.
+  `#37 <https://github.com/alanhamlett/pip-update-requirements/issues/37>`_
+
+
 5.4.0 (2021-03-14)
 ++++++++++++++++++
 
