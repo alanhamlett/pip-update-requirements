@@ -3,6 +3,13 @@ History
 -------
 
 
+5.4.2 (2021-07-05)
+++++++++++++++++++
+
+- Patch vendored pip to fix ImportError on py3.10.
+  `#39 <https://github.com/alanhamlett/pip-update-requirements/issues/39>`_
+
+
 5.4.1 (2021-05-15)
 ++++++++++++++++++
 
