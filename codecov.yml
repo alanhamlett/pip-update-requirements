@@ -1,0 +1,5 @@
+ignore:
+  - "pur/packages"
+  - "*/python?.?/*"
+  - "*/site-packages/nose/*"
+comment: false
