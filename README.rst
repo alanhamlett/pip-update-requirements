@@ -1,9 +1,9 @@
-.. image:: https://travis-ci.org/alanhamlett/pip-update-requirements.svg?branch=master
-    :target: https://travis-ci.org/alanhamlett/pip-update-requirements
+.. image:: https://img.shields.io/github/workflow/status/alanhamlett/pip-update-requirements/Tests/master?label=tests
+    :target: https://github.com/alanhamlett/pip-update-requirements/actions
     :alt: Tests
 
-.. image:: https://coveralls.io/repos/alanhamlett/pip-update-requirements/badge.svg?branch=master&service=github
-    :target: https://coveralls.io/github/alanhamlett/pip-update-requirements?branch=master
+.. image:: https://codecov.io/gh/alanhamlett/pip-update-requirements/branch/master/graph/badge.svg?token=Ob1I7eMhiS
+    :target: https://codecov.io/gh/alanhamlett/pip-update-requirements
     :alt: Coverage
 
 .. image:: https://img.shields.io/pypi/v/pur.svg
