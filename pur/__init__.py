@@ -15,7 +15,7 @@ from click import echo as _echo
 from collections import defaultdict
 try:
     from StringIO import StringIO
-except ImportError:  # pragma: nocover
+except ImportError:  # pragma: no cover
     from io import StringIO
 
 # add local packages folder to sys.path
@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 'packages'))
 try:
     from pip._internal.download import PipSession
-except (TypeError, ImportError):  # pragma: nocover
+except (TypeError, ImportError):  # pragma: no cover
     # on Windows, non-ASCII characters in import path can be fixed using
     # the script path from sys.argv[0].
     # More info at https://github.com/wakatime/wakatime/issues/32

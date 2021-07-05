@@ -159,7 +159,7 @@ def latest_version(req, spec_ver, session, finder, minor=[], patch=[], pre=[]):
     :param pre:      List of packages to allow updating to pre-release
                      versions.
     """
-    if not req:  # pragma: nocover
+    if not req:  # pragma: no cover
         return None
 
     all_candidates = finder.find_all_candidates(req.name)
