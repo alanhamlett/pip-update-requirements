@@ -3,6 +3,13 @@ History
 -------
 
 
+5.4.3 (2022-01-20)
+++++++++++++++++++
+
+- Upgrade click version >= 8.0.0.
+  `#38 <https://github.com/alanhamlett/pip-update-requirements/issues/38>`_
+
+
 5.4.2 (2021-07-05)
 ++++++++++++++++++
 
