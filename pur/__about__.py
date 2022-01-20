@@ -1,7 +1,7 @@
 __title__ = 'pur'
 __description__ = 'Update packages in a requirements.txt file to latest versions.'
 __url__ = 'https://github.com/alanhamlett/pip-update-requirements'
-__version_info__ = ('5', '4', '2')
+__version_info__ = ('5', '4', '3')
 __version__ = '.'.join(__version_info__)
 __author__ = 'Alan Hamlett'
 __author_email__ = 'alan.hamlett@gmail.com'
