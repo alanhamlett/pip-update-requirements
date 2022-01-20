@@ -49,16 +49,6 @@ from .utils import (ExitCodeException, can_check_version, should_update,
 PUR_GLOBAL_UPDATED = 0
 
 
-class PathOrBool(click.Path):
-    def convert(self, value, param, ctx):
-        if value.lower() == 'true':
-            return True
-        elif value.lower() == 'false':
-            return False
-        else:
-            return super(PathOrBool, self).convert(value, param, ctx)
-
-
 @click.command()
 @click.option('-r', '--requirement', type=click.Path(),
               help='The requirements.txt file to update; Defaults to using ' +
@@ -81,10 +71,8 @@ class PathOrBool(click.Path):
 @click.option('--index-url', type=click.STRING, multiple=True, help='Base ' +
               'URL of the Python Package Index. Can be provided multiple ' +
               'times for extra index urls.')
-@click.option('--verify', type=PathOrBool(), default='true', help='Either a ' +
-              'boolean true/false, in which case it controls whether we ' +
-              'verify the server\'s TLS certificate, or a string, in which ' +
-              'case it must be a path to a CA certs bundle. Defaults to True.')
+@click.option('--verify', type=click.Path(), help='Path to PEM-encoded CA ' +
+              'certificate bundle. If provided, overrides the default.')
 @click.option('--only', type=click.STRING, help='Comma separated list of ' +
               'packages. Only these packages will be updated.')
 @click.option('-m', '--minor', type=click.STRING, help='Comma separated ' +
