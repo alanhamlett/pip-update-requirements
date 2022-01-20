@@ -90,10 +90,8 @@ Options
 -s, --skip TEXT          Comma separated list of packages to skip updating.
 --index-url TEXT         Base URL of the Python Package Index. Can be
                          provided multiple times for extra index urls.
---verify PATH            Either a boolean true/false, in which case it
-                         controls whether we verify the server's TLS
-                         certificate, or a string, in which case it must be
-                         a path to a CA certs bundle. Defaults to True.
+--verify PATH            Path to PEM-encoded CA certificate bundle. If
+                         provided, overrides the default.
 --only TEXT              Comma separated list of packages. Only these
                          packages will be updated.
 -m, --minor TEXT         Comma separated list of packages to only update
