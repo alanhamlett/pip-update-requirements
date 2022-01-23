@@ -80,24 +80,25 @@ Options
                          if it exist.
 -o, --output PATH        Output updated packages to this file; Defaults to
                          overwriting the input requirements.txt file.
--i, --interactive        Interactively prompts before updating each package.
+--interactive            Interactively prompts before updating each package.
 -f, --force              Force updating packages even when a package has no
                          version specified in the input requirements.txt
                          file.
 -d, --dry-run            Output changes to STDOUT instead of overwriting the
                          requirements.txt file.
 -n, --no-recursive       Prevents updating nested requirements files.
--s, --skip TEXT          Comma separated list of packages to skip updating.
+--skip TEXT              Comma separated list of packages to skip updating.
 --index-url TEXT         Base URL of the Python Package Index. Can be
                          provided multiple times for extra index urls.
---verify PATH            Path to PEM-encoded CA certificate bundle. If
+--cert PATH              Path to PEM-encoded CA certificate bundle. If
                          provided, overrides the default.
+--no-ssl-verify          Disable TLS cert verification.
 --only TEXT              Comma separated list of packages. Only these
                          packages will be updated.
--m, --minor TEXT         Comma separated list of packages to only update
+--minor TEXT             Comma separated list of packages to only update
                          minor versions, never major. Use "*" to limit every
                          package to minor version updates.
--p, --patch TEXT         Comma separated list of packages to only update
+--patch TEXT             Comma separated list of packages to only update
                          patch versions, never major or minor. Use "*" to
                          limit every package to patch version updates.
 --pre TEXT               Comma separated list of packages to allow updating
