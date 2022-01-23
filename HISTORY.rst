@@ -3,6 +3,13 @@ History
 -------
 
 
+6.0.0 (2022-01-23)
+++++++++++++++++++
+
+- Upgrade pip to version 21.3.1, and drop support for Python 2.
+  `#43 <https://github.com/alanhamlett/pip-update-requirements/pull/43>`_
+
+
 5.4.3 (2022-01-20)
 ++++++++++++++++++
 
