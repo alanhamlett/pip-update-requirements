@@ -1,85 +1,57 @@
-from __future__ import absolute_import
-
+import functools
 import logging
-import sys
-from email.parser import FeedParser
+import re
+from typing import NewType, Optional, Tuple, cast
 
-from pip._vendor import pkg_resources
 from pip._vendor.packaging import specifiers, version
+from pip._vendor.packaging.requirements import Requirement
 
-from pip._internal import exceptions
-from pip._internal.utils.misc import display_path
-from pip._internal.utils.typing import MYPY_CHECK_RUNNING
-
-if MYPY_CHECK_RUNNING:
-    from typing import Optional  # noqa: F401
-    from email.message import Message  # noqa: F401
-    from pip._vendor.pkg_resources import Distribution  # noqa: F401
-
+NormalizedExtra = NewType("NormalizedExtra", str)
 
 logger = logging.getLogger(__name__)
 
 
-def check_requires_python(requires_python):
-    # type: (Optional[str]) -> bool
+def check_requires_python(
+    requires_python: Optional[str], version_info: Tuple[int, ...]
+) -> bool:
     """
-    Check if the python version in use match the `requires_python` specifier.
+    Check if the given Python version matches a "Requires-Python" specifier.
 
-    Returns `True` if the version of python in use matches the requirement.
-    Returns `False` if the version of python in use does not matches the
-    requirement.
+    :param version_info: A 3-tuple of ints representing a Python
+        major-minor-micro version to check (e.g. `sys.version_info[:3]`).
 
-    Raises an InvalidSpecifier if `requires_python` have an invalid format.
+    :return: `True` if the given Python version satisfies the requirement.
+        Otherwise, return `False`.
+
+    :raises InvalidSpecifier: If `requires_python` has an invalid format.
     """
     if requires_python is None:
         # The package provides no information
         return True
     requires_python_specifier = specifiers.SpecifierSet(requires_python)
 
-    # We only use major.minor.micro
-    python_version = version.parse('.'.join(map(str, sys.version_info[:3])))
+    python_version = version.parse(".".join(map(str, version_info)))
     return python_version in requires_python_specifier
 
 
-def get_metadata(dist):
-    # type: (Distribution) -> Message
-    if (isinstance(dist, pkg_resources.DistInfoDistribution) and
-            dist.has_metadata('METADATA')):
-        metadata = dist.get_metadata('METADATA')
-    elif dist.has_metadata('PKG-INFO'):
-        metadata = dist.get_metadata('PKG-INFO')
-    else:
-        logger.warning("No metadata found in %s", display_path(dist.location))
-        metadata = ''
-
-    feed_parser = FeedParser()
-    feed_parser.feed(metadata)
-    return feed_parser.close()
+@functools.lru_cache(maxsize=512)
+def get_requirement(req_string: str) -> Requirement:
+    """Construct a packaging.Requirement object with caching"""
+    # Parsing requirement strings is expensive, and is also expected to happen
+    # with a low diversity of different arguments (at least relative the number
+    # constructed). This method adds a cache to requirement object creation to
+    # minimize repeated parsing of the same string to construct equivalent
+    # Requirement objects.
+    return Requirement(req_string)
 
 
-def check_dist_requires_python(dist):
-    pkg_info_dict = get_metadata(dist)
-    requires_python = pkg_info_dict.get('Requires-Python')
-    try:
-        if not check_requires_python(requires_python):
-            raise exceptions.UnsupportedPythonVersion(
-                "%s requires Python '%s' but the running Python is %s" % (
-                    dist.project_name,
-                    requires_python,
-                    '.'.join(map(str, sys.version_info[:3])),)
-            )
-    except specifiers.InvalidSpecifier as e:
-        logger.warning(
-            "Package %s has an invalid Requires-Python entry %s - %s",
-            dist.project_name, requires_python, e,
-        )
-        return
+def safe_extra(extra: str) -> NormalizedExtra:
+    """Convert an arbitrary string to a standard 'extra' name
 
+    Any runs of non-alphanumeric characters are replaced with a single '_',
+    and the result is always lowercased.
 
-def get_installer(dist):
-    # type: (Distribution) -> str
-    if dist.has_metadata('INSTALLER'):
-        for line in dist.get_metadata_lines('INSTALLER'):
-            if line.strip():
-                return line.strip()
-    return ''
+    This function is duplicated from ``pkg_resources``. Note that this is not
+    the same to either ``canonicalize_name`` or ``_egg_link_name``.
+    """
+    return cast(NormalizedExtra, re.sub("[^A-Za-z0-9.-]+", "_", extra).lower())

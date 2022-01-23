@@ -5,11 +5,11 @@ import os
 import shutil
 import tempfile
 
-from pur import pur, update_requirements, __version__
+from pur import pur, __version__
 
 from click.testing import CliRunner
-from pip._internal.index import InstallationCandidate, PackageFinder, Link
-from pip._internal.req.req_install import Version
+from pip._internal.models.candidate import InstallationCandidate
+from pip._internal.models.link import Link
 
 from . import utils
 from .utils import u
@@ -44,7 +44,7 @@ class PurTestCase(utils.TestCase):
         shutil.copy('tests/samples/requirements.txt', requirements)
         args = ['-r', requirements]
 
-        with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+        with utils.mock.patch('pip._internal.index.package_finder.PackageFinder.find_all_candidates') as mock_find_all_candidates:
             project = 'flask'
             version = '0.10.1'
             link = Link('')
@@ -59,33 +59,6 @@ class PurTestCase(utils.TestCase):
             expected_requirements = open('tests/samples/results/test_updates_package').read()
             self.assertEquals(open(requirements).read(), expected_requirements)
 
-    def test_updates_package_without_command_line(self):
-        tempdir = tempfile.mkdtemp()
-        requirements = os.path.join(tempdir, 'requirements.txt')
-        shutil.copy('tests/samples/requirements.txt', requirements)
-        args = {
-            'input_file': requirements,
-        }
-        expected_result = {
-            'current': Version('0.9'),
-            'updated': True,
-            'latest': Version('0.10.1'),
-            'message': 'Updated flask: 0.9 -> 0.10.1',
-            'package': 'flask',
-        }
-
-        with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
-            project = 'flask'
-            version = '0.10.1'
-            link = Link('')
-            candidate = InstallationCandidate(project, version, link)
-            mock_find_all_candidates.return_value = [candidate]
-
-            result = update_requirements(**args)
-            expected_requirements = open('tests/samples/results/test_updates_package').read()
-            self.assertEquals(open(requirements).read(), expected_requirements)
-            self.assertEquals(result['flask'][0], expected_result)
-
     def test_updates_package_in_nested_requirements(self):
         tempdir = tempfile.mkdtemp()
         requirements = os.path.join(tempdir, 'requirements-with-nested-reqfile.txt')
@@ -94,7 +67,7 @@ class PurTestCase(utils.TestCase):
         shutil.copy('tests/samples/requirements-nested.txt', requirements_nested)
         args = ['-r', requirements]
 
-        with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+        with utils.mock.patch('pip._internal.index.package_finder.PackageFinder.find_all_candidates') as mock_find_all_candidates:
             project = 'readtime'
             version = '0.10.1'
             link = Link('')
@@ -111,44 +84,13 @@ class PurTestCase(utils.TestCase):
             expected_requirements = open('tests/samples/results/test_updates_package_in_nested_requirements_nested').read()
             self.assertEquals(open(requirements_nested).read(), expected_requirements)
 
-    def test_updates_package_in_nested_requirements_without_command_line(self):
-        tempdir = tempfile.mkdtemp()
-        requirements = os.path.join(tempdir, 'requirements-with-nested-reqfile.txt')
-        requirements_nested = os.path.join(tempdir, 'requirements-nested.txt')
-        shutil.copy('tests/samples/requirements-with-nested-reqfile.txt', requirements)
-        shutil.copy('tests/samples/requirements-nested.txt', requirements_nested)
-        args = {
-            'input_file': requirements,
-        }
-        expected_result = {
-            'current': Version('0.9'),
-            'updated': True,
-            'latest': Version('0.10.1'),
-            'message': 'Updated readtime: 0.9 -> 0.10.1',
-            'package': 'readtime',
-        }
-        expected_requirements = open('tests/samples/results/test_updates_package_in_nested_requirements').read()
-        expected_requirements_nested = open('tests/samples/results/test_updates_package_in_nested_requirements_nested').read()
-
-        with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
-            project = 'readtime'
-            version = '0.10.1'
-            link = Link('')
-            candidate = InstallationCandidate(project, version, link)
-            mock_find_all_candidates.return_value = [candidate]
-
-            result = update_requirements(**args)
-            self.assertEquals(open(requirements).read(), expected_requirements)
-            self.assertEquals(open(requirements_nested).read(), expected_requirements_nested)
-            self.assertEquals(result['readtime'][0], expected_result)
-
     def test_requirements_long_option_accepted(self):
         tempdir = tempfile.mkdtemp()
         requirements = os.path.join(tempdir, 'requirements.txt')
         shutil.copy('tests/samples/requirements.txt', requirements)
         args = ['--requirement', requirements]
 
-        with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+        with utils.mock.patch('pip._internal.index.package_finder.PackageFinder.find_all_candidates') as mock_find_all_candidates:
             project = 'flask'
             version = '0.10.1'
             link = Link('')
@@ -171,7 +113,7 @@ class PurTestCase(utils.TestCase):
         shutil.copy('tests/samples/requirements.txt', requirements)
         args = ['-r', requirements, '--output', output]
 
-        with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+        with utils.mock.patch('pip._internal.index.package_finder.PackageFinder.find_all_candidates') as mock_find_all_candidates:
             project = 'flask'
             version = '0.10.1'
             link = Link('')
@@ -201,7 +143,7 @@ class PurTestCase(utils.TestCase):
         expected_requirements = open('tests/samples/results/test_updates_package_in_nested_requirements').read()
         expected_requirements = expected_requirements.replace('-r requirements-nested.txt\n', open('tests/samples/results/test_updates_package_in_nested_requirements_nested').read())
 
-        with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+        with utils.mock.patch('pip._internal.index.package_finder.PackageFinder.find_all_candidates') as mock_find_all_candidates:
             project = 'readtime'
             version = '0.10.1'
             link = Link('')
@@ -222,7 +164,7 @@ class PurTestCase(utils.TestCase):
         shutil.copy('tests/samples/requirements-up-to-date.txt', requirements)
         args = ['-r', requirements, '--nonzero-exit-code']
 
-        with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+        with utils.mock.patch('pip._internal.index.package_finder.PackageFinder.find_all_candidates') as mock_find_all_candidates:
             project = 'flask'
             version = '0.10.1'
             link = Link('')
@@ -243,7 +185,7 @@ class PurTestCase(utils.TestCase):
         shutil.copy('tests/samples/requirements.txt', requirements)
         args = ['-r', requirements, '--nonzero-exit-code']
 
-        with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+        with utils.mock.patch('pip._internal.index.package_finder.PackageFinder.find_all_candidates') as mock_find_all_candidates:
             project = 'flask'
             version = '0.10.1'
             link = Link('')
@@ -266,7 +208,7 @@ class PurTestCase(utils.TestCase):
         shutil.copy('tests/samples/requirements-nested.txt', requirements_nested)
         args = ['-r', requirements, '--nonzero-exit-code']
 
-        with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+        with utils.mock.patch('pip._internal.index.package_finder.PackageFinder.find_all_candidates') as mock_find_all_candidates:
             project = 'readtime'
             version = '0.10.1'
             link = Link('')
@@ -291,7 +233,7 @@ class PurTestCase(utils.TestCase):
         shutil.copy('tests/samples/requirements-nested.txt', requirements_nested)
         args = ['-r', requirements, '-n']
 
-        with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+        with utils.mock.patch('pip._internal.index.package_finder.PackageFinder.find_all_candidates') as mock_find_all_candidates:
             project = 'readtime'
             version = '0.10.1'
             link = Link('')
@@ -313,9 +255,9 @@ class PurTestCase(utils.TestCase):
         tempdir = tempfile.mkdtemp()
         requirements = os.path.join(tempdir, 'requirements.txt')
         shutil.copy('tests/samples/requirements-multiple.txt', requirements)
-        args = ['-r', requirements, '-s', 'flask']
+        args = ['-r', requirements, '--skip', 'flask']
 
-        with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+        with utils.mock.patch('pip._internal.index.package_finder.PackageFinder.find_all_candidates') as mock_find_all_candidates:
             project = 'flask'
             version = '0.10.1'
             link = Link('')
@@ -336,7 +278,7 @@ class PurTestCase(utils.TestCase):
         shutil.copy('tests/samples/requirements.txt', requirements)
         args = ['-r', requirements, '--minor', 'flask']
 
-        with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+        with utils.mock.patch('pip._internal.index.package_finder.PackageFinder.find_all_candidates') as mock_find_all_candidates:
             project = 'flask'
             version = '12.1.3'
             link = Link('')
@@ -357,7 +299,7 @@ class PurTestCase(utils.TestCase):
         shutil.copy('tests/samples/requirements.txt', requirements)
         args = ['-r', requirements, '--minor', 'flask']
 
-        with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+        with utils.mock.patch('pip._internal.index.package_finder.PackageFinder.find_all_candidates') as mock_find_all_candidates:
             project = 'flask'
             version = '13.0.0'
             link = Link('')
@@ -378,7 +320,7 @@ class PurTestCase(utils.TestCase):
         shutil.copy('tests/samples/requirements.txt', requirements)
         args = ['-r', requirements, '--minor', '*']
 
-        with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+        with utils.mock.patch('pip._internal.index.package_finder.PackageFinder.find_all_candidates') as mock_find_all_candidates:
             project = 'flask'
             version = '13.0.0'
             link = Link('')
@@ -399,7 +341,7 @@ class PurTestCase(utils.TestCase):
         shutil.copy('tests/samples/requirements.txt', requirements)
         args = ['-r', requirements, '--patch', 'flask']
 
-        with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+        with utils.mock.patch('pip._internal.index.package_finder.PackageFinder.find_all_candidates') as mock_find_all_candidates:
             project = 'flask'
             version = '12.0.3'
             link = Link('')
@@ -420,7 +362,7 @@ class PurTestCase(utils.TestCase):
         shutil.copy('tests/samples/requirements.txt', requirements)
         args = ['-r', requirements, '--patch', 'flask']
 
-        with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+        with utils.mock.patch('pip._internal.index.package_finder.PackageFinder.find_all_candidates') as mock_find_all_candidates:
             project = 'flask'
             version = '12.1.3'
             link = Link('')
@@ -441,7 +383,7 @@ class PurTestCase(utils.TestCase):
         shutil.copy('tests/samples/requirements.txt', requirements)
         args = ['-r', requirements, '--patch', '*']
 
-        with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+        with utils.mock.patch('pip._internal.index.package_finder.PackageFinder.find_all_candidates') as mock_find_all_candidates:
             project = 'flask'
             version = '12.1.3'
             link = Link('')
@@ -462,7 +404,7 @@ class PurTestCase(utils.TestCase):
         shutil.copy('tests/samples/requirements.txt', requirements)
         args = ['-r', requirements]
 
-        with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+        with utils.mock.patch('pip._internal.index.package_finder.PackageFinder.find_all_candidates') as mock_find_all_candidates:
             project = 'flask'
             version = '13.0.0.dev0'
             link = Link('')
@@ -483,7 +425,7 @@ class PurTestCase(utils.TestCase):
         shutil.copy('tests/samples/requirements.txt', requirements)
         args = ['-r', requirements, '--pre', 'flask']
 
-        with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+        with utils.mock.patch('pip._internal.index.package_finder.PackageFinder.find_all_candidates') as mock_find_all_candidates:
             project = 'flask'
             version = '13.0.0.dev0'
             link = Link('')
@@ -504,7 +446,7 @@ class PurTestCase(utils.TestCase):
         shutil.copy('tests/samples/requirements.txt', requirements)
         args = ['-r', requirements, '--pre', '*']
 
-        with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+        with utils.mock.patch('pip._internal.index.package_finder.PackageFinder.find_all_candidates') as mock_find_all_candidates:
             project = 'flask'
             version = '13.0.0.dev0'
             link = Link('')
@@ -524,9 +466,9 @@ class PurTestCase(utils.TestCase):
         tempdir = tempfile.mkdtemp()
         tmpfile = os.path.join(tempdir, 'requirements.txt')
         shutil.copy(requirements, tmpfile)
-        args = ['-r', tmpfile, '-s', 'flask, alembic , SQLAlchemy']
+        args = ['-r', tmpfile, '--skip', 'flask, alembic , SQLAlchemy']
 
-        with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+        with utils.mock.patch('pip._internal.index.package_finder.PackageFinder.find_all_candidates') as mock_find_all_candidates:
             project = 'flask'
             version = '0.10.1'
             link = Link('')
@@ -547,7 +489,7 @@ class PurTestCase(utils.TestCase):
         shutil.copy('tests/samples/requirements-multiple.txt', requirements)
         args = ['-r', requirements, '--only', 'flask']
 
-        with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+        with utils.mock.patch('pip._internal.index.package_finder.PackageFinder.find_all_candidates') as mock_find_all_candidates:
             project = 'flask'
             version = '0.10.1'
             link = Link('')
@@ -569,7 +511,7 @@ class PurTestCase(utils.TestCase):
         shutil.copy(requirements, tmpfile)
         args = ['-r', tmpfile, '--only', 'flask, sqlalchemy']
 
-        with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+        with utils.mock.patch('pip._internal.index.package_finder.PackageFinder.find_all_candidates') as mock_find_all_candidates:
             project = 'flask'
             version = '0.10.1'
             link = Link('')
@@ -590,7 +532,7 @@ class PurTestCase(utils.TestCase):
         shutil.copy('tests/samples/requirements.txt', requirements)
         args = ['-r', requirements, '-f']
 
-        with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+        with utils.mock.patch('pip._internal.index.package_finder.PackageFinder.find_all_candidates') as mock_find_all_candidates:
             project = 'flask'
             version = '0.10.1'
             link = Link('')
@@ -612,7 +554,7 @@ class PurTestCase(utils.TestCase):
         shutil.copy(requirements, tmpfile)
         args = ['-r', tmpfile]
 
-        with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+        with utils.mock.patch('pip._internal.index.package_finder.PackageFinder.find_all_candidates') as mock_find_all_candidates:
             mock_find_all_candidates.return_value = []
 
             result = self.runner.invoke(pur, args)
@@ -628,7 +570,7 @@ class PurTestCase(utils.TestCase):
         shutil.copy('tests/samples/requirements.txt', requirements)
         args = []
 
-        with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+        with utils.mock.patch('pip._internal.index.package_finder.PackageFinder.find_all_candidates') as mock_find_all_candidates:
             project = 'flask'
             version = '0.10.1'
             link = Link('')
@@ -649,7 +591,7 @@ class PurTestCase(utils.TestCase):
         tempdir = tempfile.mkdtemp()
         args = []
 
-        with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+        with utils.mock.patch('pip._internal.index.package_finder.PackageFinder.find_all_candidates') as mock_find_all_candidates:
             project = 'flask'
             version = '0.10.1'
             link = Link('')
@@ -670,7 +612,7 @@ class PurTestCase(utils.TestCase):
         shutil.copy('tests/samples/requirements-version-in-name.txt', requirements)
         args = ['-r', requirements]
 
-        with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+        with utils.mock.patch('pip._internal.index.package_finder.PackageFinder.find_all_candidates') as mock_find_all_candidates:
             project = 'package1'
             version = '2.0'
             link = Link('')
@@ -691,7 +633,7 @@ class PurTestCase(utils.TestCase):
         shutil.copy('tests/samples/requirements-with-extras.txt', requirements)
         args = ['-r', requirements]
 
-        with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+        with utils.mock.patch('pip._internal.index.package_finder.PackageFinder.find_all_candidates') as mock_find_all_candidates:
             project = 'firstpackage'
             version = '2.0'
             link = Link('')
@@ -712,7 +654,7 @@ class PurTestCase(utils.TestCase):
         shutil.copy('tests/samples/requirements-with-max-version-spec.txt', requirements)
         args = ['-r', requirements]
 
-        with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+        with utils.mock.patch('pip._internal.index.package_finder.PackageFinder.find_all_candidates') as mock_find_all_candidates:
             project = 'afakepackage'
             version = '0.10.1'
             link = Link('')
@@ -734,7 +676,7 @@ class PurTestCase(utils.TestCase):
         shutil.copy(requirements, tmpfile)
         args = ['-r', tmpfile]
 
-        with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+        with utils.mock.patch('pip._internal.index.package_finder.PackageFinder.find_all_candidates') as mock_find_all_candidates:
             project = 'afakepackage'
             version = '2.0'
             link = Link('')
@@ -756,7 +698,7 @@ class PurTestCase(utils.TestCase):
         shutil.copy(requirements, tmpfile)
         args = ['-r', tmpfile]
 
-        with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+        with utils.mock.patch('pip._internal.index.package_finder.PackageFinder.find_all_candidates') as mock_find_all_candidates:
             project = 'afakepackage'
             version = '0.9.1'
             link = Link('')
@@ -778,7 +720,7 @@ class PurTestCase(utils.TestCase):
         shutil.copy(requirements, tmpfile)
         args = ['-r', tmpfile]
 
-        with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+        with utils.mock.patch('pip._internal.index.package_finder.PackageFinder.find_all_candidates') as mock_find_all_candidates:
             project = 'afakepackage'
             version = '1.0'
             link = Link('')
@@ -800,7 +742,7 @@ class PurTestCase(utils.TestCase):
         shutil.copy(requirements, tmpfile)
         args = ['-r', tmpfile]
 
-        with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+        with utils.mock.patch('pip._internal.index.package_finder.PackageFinder.find_all_candidates') as mock_find_all_candidates:
             project = 'afakepackage'
             version = '1.1'
             link = Link('')
@@ -822,7 +764,7 @@ class PurTestCase(utils.TestCase):
         shutil.copy(requirements, tmpfile)
         args = ['-r', tmpfile]
 
-        with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+        with utils.mock.patch('pip._internal.index.package_finder.PackageFinder.find_all_candidates') as mock_find_all_candidates:
             project = 'fakewebserver'
             version = '1.8.13'
             link = Link('')
@@ -844,7 +786,7 @@ class PurTestCase(utils.TestCase):
         shutil.copy(requirements, tmpfile)
         args = ['-r', tmpfile]
 
-        with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+        with utils.mock.patch('pip._internal.index.package_finder.PackageFinder.find_all_candidates') as mock_find_all_candidates:
             project = 'fakewebserver'
             version = '0.9.1'
             link = Link('')
@@ -866,7 +808,7 @@ class PurTestCase(utils.TestCase):
         shutil.copy(requirements, tmpfile)
         args = ['-r', tmpfile, '-d']
 
-        with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+        with utils.mock.patch('pip._internal.index.package_finder.PackageFinder.find_all_candidates') as mock_find_all_candidates:
             project = 'flask'
             version = '0.10.1'
             link = Link('')
@@ -889,7 +831,7 @@ class PurTestCase(utils.TestCase):
         shutil.copy('tests/samples/requirements-nested.txt', requirements_nested)
         args = ['-r', requirements, '-d']
 
-        with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+        with utils.mock.patch('pip._internal.index.package_finder.PackageFinder.find_all_candidates') as mock_find_all_candidates:
             project = 'readtime'
             version = '0.10.1'
             link = Link('')
@@ -918,107 +860,40 @@ class PurTestCase(utils.TestCase):
         shutil.copy(requirements, tmpfile)
         args = ['-r', tmpfile]
 
-        class PackageFinderSpy(PackageFinder):
-
-            _spy = None
-
-            def __init__(self, *args, **kwargs):
-                super(PackageFinderSpy, self).__init__(*args, **kwargs)
-                PackageFinderSpy._spy = self
-
-        with utils.mock.patch('pur.PackageFinder', wraps=PackageFinderSpy) as mock_finder:
-            with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
-
-                project = 'flask'
-                version = '12.1'
-                link = Link('')
-                candidate = InstallationCandidate(project, version, link)
-                mock_find_all_candidates.return_value = [candidate]
-
-                self.runner.invoke(pur, args)
-
-                self.assertTrue(mock_finder.called)
-
-                self.assertEqual(
-                    PackageFinderSpy._spy.index_urls,
-                    ['http://pypi.example.com', 'https://pypi2.example.com']
-                )
-                self.assertEqual(
-                    PackageFinderSpy._spy.secure_origins,
-                    [('*', 'pypi.example.com', '*')]
-                )
+        with utils.mock.patch('pip._vendor.requests.adapters.HTTPAdapter.send') as mock_send:
+            self.runner.invoke(pur, args)
+            self.assertEquals(mock_send.call_args_list[0][0][0].url, 'http://pypi.example.com/flask/')
 
     def test_updates_from_alt_index_url_command_line_arg(self):
         requirements = 'tests/samples/requirements.txt'
         tempdir = tempfile.mkdtemp()
         tmpfile = os.path.join(tempdir, 'requirements.txt')
         shutil.copy(requirements, tmpfile)
-        args = ['--index-url', 'http://pypi.example.com', '--index-url', 'http://pypi2.example.com', '-r', tmpfile]
+        args = ['--index-url', 'http://pypi.example.com', '--index-url', 'https://pypi2.example.com', '-r', tmpfile]
 
-        class PackageFinderSpy(PackageFinder):
-
-            _spy = None
-
-            def __init__(self, *args, **kwargs):
-                super(PackageFinderSpy, self).__init__(*args, **kwargs)
-                PackageFinderSpy._spy = self
-
-        with utils.mock.patch('pur.PackageFinder', wraps=PackageFinderSpy) as mock_finder:
-            with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
-
-                project = 'flask'
-                version = '12.1'
-                link = Link('')
-                candidate = InstallationCandidate(project, version, link)
-                mock_find_all_candidates.return_value = [candidate]
-
-                self.runner.invoke(pur, args)
-
-                self.assertTrue(mock_finder.called)
-
-                self.assertEqual(
-                    PackageFinderSpy._spy.index_urls,
-                    ('http://pypi.example.com', 'http://pypi2.example.com')
-                )
+        with utils.mock.patch('pip._vendor.requests.adapters.HTTPAdapter.send') as mock_send:
+            self.runner.invoke(pur, args)
+            self.assertEquals(mock_send.call_args_list[0][0][0].url, 'https://pypi2.example.com/flask/')
 
     def test_updates_from_alt_index_url_with_verify_command_line_arg(self):
         requirements = 'tests/samples/requirements.txt'
         tempdir = tempfile.mkdtemp()
         tmpfile = os.path.join(tempdir, 'requirements.txt')
         shutil.copy(requirements, tmpfile)
-        args = ['--index-url', 'https://pypi.internal', '--verify', '/path/to/cert/file', '-r', tmpfile]
+        args = ['--index-url', 'https://example.com', '--cert', '/path/to/cert/file', '-r', tmpfile]
 
-        class PackageFinderSpy(PackageFinder):
-
-            _spy = None
-
-            def __init__(self, *args, **kwargs):
-                super(PackageFinderSpy, self).__init__(*args, **kwargs)
-                PackageFinderSpy._spy = self
-
-        with utils.mock.patch('pur.PackageFinder', wraps=PackageFinderSpy) as mock_finder:
-            with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
-
-                project = 'flask'
-                version = '12.1'
-                link = Link('')
-                candidate = InstallationCandidate(project, version, link)
-                mock_find_all_candidates.return_value = [candidate]
-
-                self.runner.invoke(pur, args)
-
-                self.assertTrue(mock_finder.called)
-
-                self.assertEqual(PackageFinderSpy._spy.index_urls, ('https://pypi.internal', ))
-                self.assertEqual(PackageFinderSpy._spy.session.verify, '/path/to/cert/file')
+        with utils.mock.patch('pip._vendor.requests.adapters.HTTPAdapter.send') as mock_send:
+            self.runner.invoke(pur, args)
+            self.assertEquals(mock_send.call_args_list[0][0][0].url, 'https://example.com/flask/')
+            self.assertEquals(mock_send.call_args_list[0][1]['verify'], '/path/to/cert/file')
 
     def test_interactive_choice_default(self):
         tempdir = tempfile.mkdtemp()
         requirements = os.path.join(tempdir, 'requirements.txt')
         shutil.copy('tests/samples/requirements.txt', requirements)
-        args = ['-r', requirements, '-i']
+        args = ['-r', requirements, '--interactive']
 
-        with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+        with utils.mock.patch('pip._internal.index.package_finder.PackageFinder.find_all_candidates') as mock_find_all_candidates:
             project = 'flask'
             version = '0.10.1'
             link = Link('')
@@ -1038,9 +913,9 @@ class PurTestCase(utils.TestCase):
         tempdir = tempfile.mkdtemp()
         requirements = os.path.join(tempdir, 'requirements.txt')
         shutil.copy('tests/samples/requirements.txt', requirements)
-        args = ['-r', requirements, '-i']
+        args = ['-r', requirements, '--interactive']
 
-        with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+        with utils.mock.patch('pip._internal.index.package_finder.PackageFinder.find_all_candidates') as mock_find_all_candidates:
             project = 'flask'
             version = '0.10.1'
             link = Link('')
@@ -1060,9 +935,9 @@ class PurTestCase(utils.TestCase):
         tempdir = tempfile.mkdtemp()
         requirements = os.path.join(tempdir, 'requirements.txt')
         shutil.copy('tests/samples/requirements.txt', requirements)
-        args = ['-r', requirements, '-i']
+        args = ['-r', requirements, '--interactive']
 
-        with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+        with utils.mock.patch('pip._internal.index.package_finder.PackageFinder.find_all_candidates') as mock_find_all_candidates:
             project = 'flask'
             version = '0.10.1'
             link = Link('')
@@ -1082,9 +957,9 @@ class PurTestCase(utils.TestCase):
         tempdir = tempfile.mkdtemp()
         requirements = os.path.join(tempdir, 'requirements.txt')
         shutil.copy('tests/samples/requirements-multiple.txt', requirements)
-        args = ['-r', requirements, '-i']
+        args = ['-r', requirements, '--interactive']
 
-        with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+        with utils.mock.patch('pip._internal.index.package_finder.PackageFinder.find_all_candidates') as mock_find_all_candidates:
             project = 'flask'
             version = '0.10.1'
             link = Link('')
@@ -1103,9 +978,9 @@ class PurTestCase(utils.TestCase):
         tempdir = tempfile.mkdtemp()
         requirements = os.path.join(tempdir, 'requirements.txt')
         shutil.copy('tests/samples/requirements-multiple.txt', requirements)
-        args = ['-r', requirements, '-i']
+        args = ['-r', requirements, '--interactive']
 
-        with utils.mock.patch('pip._internal.index.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+        with utils.mock.patch('pip._internal.index.package_finder.PackageFinder.find_all_candidates') as mock_find_all_candidates:
             project = 'flask'
             version = '0.10.1'
             link = Link('')

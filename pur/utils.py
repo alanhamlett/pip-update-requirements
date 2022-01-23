@@ -8,32 +8,74 @@
 """
 
 
-import click
 import re
-from click import echo as _echo
 
-from pip._internal.req import req_file
-from pip._vendor.packaging.version import parse, InvalidVersion, Version
+import click
+from click import echo as _echo
+from pip._internal.index.collector import LinkCollector
+from pip._internal.index.package_finder import PackageFinder
+from pip._internal.models.search_scope import SearchScope
+from pip._internal.models.selection_prefs import SelectionPreferences
+from pip._internal.req.req_file import COMMENT_RE
+from pip._vendor.packaging.version import InvalidVersion, Version, parse
 
 from .exceptions import StopUpdating
 
 
-def parse_requirement_line(line, filename, line_number, session, finder):
-    """Parse a requirement line and return an InstallRequirement instance.
+def build_package_finder(session=None, index_urls=[]):
+    search_scope = SearchScope.create(
+        find_links=[],
+        index_urls=index_urls,
+    )
+    link_collector = LinkCollector(
+        session=session,
+        search_scope=search_scope,
+    )
+    selection_prefs = SelectionPreferences(
+        allow_yanked=False,
+        allow_all_prereleases=True,
+        # ignore_requires_python=True,
+    )
+    return PackageFinder.create(
+        link_collector=link_collector,
+        selection_prefs=selection_prefs,
+    )
 
-    :param line:         One line from a requirements.txt file.
-    :param filename:     Path to a requirements.txt file.
-    :param line_number:  The integer line number of the current line.
-    :param session:      Instance of pip.download.PipSession.
-    :param finder:       Instance of pip.download.PackageFinder.
+
+def join_lines(lines_enum):
+    """Joins a line ending in '\' with the previous line (except when following
+    comments).  The joined line takes on the index of the first line.
     """
+    primary_line_number = None
+    new_line = []
+    orig_lines = []
+    for line_number, line in lines_enum:
+        original_line = line
+        if not line.endswith('\\') or COMMENT_RE.match(line):
+            if COMMENT_RE.match(line):
+                # this ensures comments are always matched later
+                line = ' ' + line
+            if new_line:
+                new_line.append(line)
+                orig_lines.append(original_line)
+                assert primary_line_number is not None
+                yield primary_line_number, ''.join(new_line), '\n'.join(orig_lines)
+                new_line = []
+                orig_lines = []
+            else:
+                yield line_number, line, original_line
+        else:
+            if not new_line:
+                primary_line_number = line_number
+            new_line.append(line.strip('\\'))
+            orig_lines.append(original_line)
 
-    if not line:
-        return None
+    # last line contains \
+    if new_line:
+        assert primary_line_number is not None
+        yield primary_line_number, ''.join(new_line), '\n'.join(orig_lines)
 
-    reqs = list(req_file.process_line(
-                line, filename, line_number, session=session, finder=finder))
-    return reqs[0] if len(reqs) > 0 else None
+    # TODO: handle space after '\'.
 
 
 def current_version(req):
@@ -97,60 +139,11 @@ def old_version(spec_ver):
     return 'Unknown'
 
 
-def yield_lines(content):
-    """Yields a tuple of each line in a requirements file string.
-
-    The tuple contains (lineno, joined_line, original_line).
-
-    :param content:  Text content of a requirements.txt file.
-    """
-    lines = content.splitlines()
-    for lineno, joined, orig in join_lines(enumerate(lines, start=1)):
-        yield lineno, joined, orig
-
-
-def join_lines(lines_enum):
-    """Joins a line ending in '\' with the previous line.
-
-    (except when following comments). The joined line takes on the index of the
-    first line.
-    """
-    COMMENT_RE = re.compile(r'(^|\s)+#.*$')
-    primary_line_number = None
-    new_line = []
-    orig_lines = []
-    for line_number, orig_line in lines_enum:
-        line = orig_line
-        if not line.endswith('\\') or COMMENT_RE.match(line):
-            if COMMENT_RE.match(line):
-                # this ensures comments are always matched later
-                line = ' ' + line
-            if new_line:
-                new_line.append(line)
-                orig_lines.append(orig_line)
-                yield (primary_line_number, ''.join(new_line),
-                       '\n'.join(orig_lines))
-                new_line = []
-                orig_lines = []
-            else:
-                yield line_number, line, orig_line
-        else:
-            if not new_line:
-                primary_line_number = line_number
-            new_line.append(line.rstrip('\\'))
-            orig_lines.append(orig_line)
-
-    # last line contains \
-    if new_line:
-        yield primary_line_number, ''.join(new_line), '\n'.join(orig_lines)
-
-
-def latest_version(req, spec_ver, session, finder, minor=[], patch=[], pre=[]):
+def latest_version(req, spec_ver, finder, minor=[], patch=[], pre=[]):
     """Returns a Version instance with the latest version for the package.
 
     :param req:      Instance of pip.req.req_install.InstallRequirement.
     :param spec_ver: Tuple of current versions from the requirements file.
-    :param session:  Instance of pip.download.PipSession.
     :param finder:   Instance of pip.download.PackageFinder.
     :param minor:    List of packages to only update minor and patch versions,
                      never major.
@@ -178,10 +171,15 @@ def latest_version(req, spec_ver, session, finder, minor=[], patch=[], pre=[]):
     if not all_candidates:
         return None
 
-    best_candidate = max(all_candidates,
-                         key=finder._candidate_sort_key)
-    remote_version = best_candidate.version
-    return remote_version
+    candidate_evaluator = finder.make_candidate_evaluator(
+        project_name=req.name,
+    )
+    applicable_candidates = candidate_evaluator.get_applicable_candidates(all_candidates)
+    best_candidate = candidate_evaluator.sort_best_candidate(applicable_candidates)
+    if not best_candidate:
+        return None
+
+    return best_candidate.version
 
 
 def can_check_version(req, skip, only):
