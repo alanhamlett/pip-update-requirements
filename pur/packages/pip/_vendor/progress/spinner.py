@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright (c) 2012 Giorgos Verigakis <verigak@gmail.com>
+# Copyright (c) 2012 Georgios Verigakis <verigak@gmail.com>
 #
 # Permission to use, copy, modify, and distribute this software for any
 # purpose with or without fee is hereby granted, provided that the above
@@ -16,17 +16,17 @@
 
 from __future__ import unicode_literals
 from . import Infinite
-from .helpers import WriteMixin
 
 
-class Spinner(WriteMixin, Infinite):
-    message = ''
+class Spinner(Infinite):
     phases = ('-', '\\', '|', '/')
     hide_cursor = True
 
     def update(self):
         i = self.index % len(self.phases)
-        self.write(self.phases[i])
+        message = self.message % self
+        line = ''.join([message, self.phases[i]])
+        self.writeln(line)
 
 
 class PieSpinner(Spinner):
@@ -40,5 +40,6 @@ class MoonSpinner(Spinner):
 class LineSpinner(Spinner):
     phases = ['⎺', '⎻', '⎼', '⎽', '⎼', '⎻']
 
+
 class PixelSpinner(Spinner):
-    phases = ['⣾','⣷', '⣯', '⣟', '⡿', '⢿', '⣻', '⣽']
+    phases = ['⣾', '⣷', '⣯', '⣟', '⡿', '⢿', '⣻', '⣽']

@@ -8,11 +8,14 @@
 """
 
 
-import click
 import os
+import re
 import sys
-from click import echo as _echo
 from collections import defaultdict
+
+import click
+from click import echo as _echo
+
 try:
     from StringIO import StringIO
 except ImportError:  # pragma: no cover
@@ -22,7 +25,7 @@ except ImportError:  # pragma: no cover
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 'packages'))
 try:
-    from pip._internal.download import PipSession
+    from pip._internal.network.session import PipSession
 except (TypeError, ImportError):  # pragma: no cover
     # on Windows, non-ASCII characters in import path can be fixed using
     # the script path from sys.argv[0].
@@ -30,21 +33,23 @@ except (TypeError, ImportError):  # pragma: no cover
     sys.path.insert(0,
                     os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])),
                                  'packages'))
-    from pip._internal.download import PipSession
+    from pip._internal.network.session import PipSession
 
-from pip._internal.download import get_file_content
 from pip._internal.exceptions import InstallationError
-from pip._internal.index import PackageFinder
 from pip._internal.models.index import PyPI
-from pip._internal.req import req_file
+from pip._internal.req.constructors import install_req_from_parsed_requirement
+from pip._internal.req.req_file import (COMMENT_RE, SCHEME_RE,
+                                        OptionParsingError, ParsedLine,
+                                        RequirementsFileParser,
+                                        get_file_content, get_line_parser,
+                                        handle_line)
 
 from .__about__ import __version__
 from .exceptions import StopUpdating
-from .utils import (ExitCodeException, can_check_version, should_update,
-                    old_version, requirements_line, update_requirement_line,
-                    yield_lines, parse_requirement_line, current_version,
-                    latest_version, format_list_arg)
-
+from .utils import (ExitCodeException, build_package_finder, can_check_version,
+                    current_version, format_list_arg, join_lines,
+                    latest_version, old_version, requirements_line,
+                    should_update, update_requirement_line)
 
 PUR_GLOBAL_UPDATED = 0
 
@@ -56,7 +61,7 @@ PUR_GLOBAL_UPDATED = 0
 @click.option('-o', '--output', type=click.Path(),
               help='Output updated packages to this file; Defaults to ' +
               'overwriting the input requirements.txt file.')
-@click.option('-i', '--interactive', is_flag=True, default=False,
+@click.option('--interactive', is_flag=True, default=False,
               help='Interactively prompts before updating each package.')
 @click.option('-f', '--force', is_flag=True, default=False,
               help='Force updating packages even when a package has no ' +
@@ -66,19 +71,21 @@ PUR_GLOBAL_UPDATED = 0
               'requirements.txt file.')
 @click.option('-n', '--no-recursive', is_flag=True, default=False,
               help='Prevents updating nested requirements files.')
-@click.option('-s', '--skip', type=click.STRING, help='Comma separated list ' +
+@click.option('--skip', type=click.STRING, help='Comma separated list ' +
               'of packages to skip updating.')
 @click.option('--index-url', type=click.STRING, multiple=True, help='Base ' +
               'URL of the Python Package Index. Can be provided multiple ' +
               'times for extra index urls.')
-@click.option('--verify', type=click.Path(), help='Path to PEM-encoded CA ' +
+@click.option('--cert', type=click.Path(), help='Path to PEM-encoded CA ' +
               'certificate bundle. If provided, overrides the default.')
+@click.option('--no-ssl-verify', is_flag=True, default=False,
+              help='Disable verifying the server\'s TLS certificate.')
 @click.option('--only', type=click.STRING, help='Comma separated list of ' +
               'packages. Only these packages will be updated.')
-@click.option('-m', '--minor', type=click.STRING, help='Comma separated ' +
+@click.option('--minor', type=click.STRING, help='Comma separated ' +
               'list of packages to only update minor versions, never major. ' +
               'Use "*" to limit every package to minor version updates.')
-@click.option('-p', '--patch', type=click.STRING, help='Comma separated ' +
+@click.option('--patch', type=click.STRING, help='Comma separated ' +
               'list of packages to only update patch versions, never major '+
               'or minor. Use "*" to limit every package to patch version ' +
               'updates.')
@@ -109,9 +116,13 @@ def pur(**options):
     global PUR_GLOBAL_UPDATED
     PUR_GLOBAL_UPDATED = 0
 
-    update_requirements(
+    obuffer = StringIO()
+    updates = defaultdict(list)
+
+    _update_requirements(
+        obuffer, updates,
         input_file=options['requirement'],
-        output_file=options['output'],
+        output_buffer=obuffer if options['output'] else None,
         force=options['force'],
         interactive=options['interactive'],
         skip=options['skip'],
@@ -123,8 +134,18 @@ def pur(**options):
         no_recursive=options['no_recursive'],
         echo=options['echo'],
         index_urls=options['index_url'],
-        verify=options['verify'],
+        cert=options['cert'],
+        no_ssl_verify=options['no_ssl_verify'],
     )
+
+    if not options['dry_run']:
+        output_file = options['output']
+        if not output_file:
+            output_file = options['requirement']
+        with open(output_file, 'w') as output:
+            output.write(obuffer.getvalue())
+
+    obuffer.close()
 
     if not options['dry_run']:
         _echo('All requirements up-to-date.')
@@ -135,92 +156,37 @@ def pur(**options):
         raise ExitCodeException(10)
 
 
-def update_requirements(input_file=None, output_file=None, force=False,
-                        interactive=False, skip=[], only=[], minor=[],
-                        patch=[], pre=[], dry_run=False,
-                        no_recursive=False, echo=False, index_urls=[],
-                        verify=True):
-    """Update a requirements file.
-
-    Returns a dict of package update info.
-
-    :param input_file:   Path to a requirements.txt file.
-    :param output_file:  Path to the output requirements.txt file.
-    :param force:        Force updating packages even when a package has no
-                         version specified in the input requirements.txt file.
-    :param interactive:  Interactively prompts before updating each package.
-    :param dry_run:      Output changes to STDOUT instead of overwriting the
-                         requirements.txt file.
-    :param no_recursive: Prevents updating nested requirements files.
-    :param skip:         List of packages to skip updating.
-    :param only:         List of packages to update, skipping all others.
-    :param minor:        List of packages to only update minor and patch
-                         versions, never major.
-    :param patch:        List of packages to only update patch versions, never
-                         minor or major.
-    :param pre:          List of packages to allow updating to pre-release
-                         versions.
-    :param index_urls:   List of PyPI index urls.
-    :param verify:       Either a boolean, in which case it controls whether we
-                         verify the server's TLS certificate, or a string, in
-                         which case it must be a path to a CA bundle to use.
-                         Defaults to True.
-    """
-
-    obuffer = StringIO()
-    updates = defaultdict(list)
-
-    # patch pip for handling nested requirements files
-    _patch_pip(obuffer, updates, input_file=input_file, output_file=output_file,
-              force=force, interactive=interactive, skip=skip, only=only,
-              minor=minor, patch=patch, pre=pre, dry_run=dry_run,
-              no_recursive=no_recursive, echo=echo, index_urls=index_urls,
-              verify=verify)
-
-    _internal_update_requirements(obuffer, updates,
-                                  input_file=input_file,
-                                  output_file=output_file,
-                                  force=force,
-                                  skip=skip,
-                                  only=only,
-                                  minor=minor,
-                                  patch=patch,
-                                  pre=pre,
-                                  interactive=interactive,
-                                  dry_run=dry_run,
-                                  no_recursive=no_recursive,
-                                  echo=echo,
-                                  index_urls=index_urls,
-                                  verify=verify,
-                                  )
-
-    if not dry_run:
-        if not output_file:
-            output_file = input_file
-        with open(output_file, 'w') as output:
-            output.write(obuffer.getvalue())
-
-    obuffer.close()
-
-    return updates
-
-
-def _internal_update_requirements(obuffer, updates, input_file=None,
-                                  output_file=None, force=False,
+def _update_requirements(obuffer, updates, input_file=None,
+                                  output_buffer=None, 
+                                  output_file=None,
+                                  force=False,
                                   interactive=False, skip=[], only=[],
                                   minor=[], patch=[], pre=[],
-                                  dry_run=False, no_recursive=False,
-                                  index_urls=[], echo=False, verify=None):
+                                  no_recursive=False,
+                                  dry_run=False, echo=False,
+                                  index_urls=[], cert=None,
+                                  no_ssl_verify=False):
     global PUR_GLOBAL_UPDATED
 
     updated = 0
 
     try:
-        requirements = _get_requirements_and_latest(input_file, force=force,
-                                                    minor=minor, patch=patch,
-                                                    pre=pre,
-                                                    index_urls=index_urls,
-                                                    verify=verify)
+        requirements = _get_requirements_and_latest(
+            input_file,
+            updates=updates,
+            force=force,
+            interactive=interactive,
+            minor=minor,
+            patch=patch,
+            pre=pre,
+            index_urls=index_urls,
+            cert=cert,
+            no_ssl_verify=no_ssl_verify,
+            no_recursive=no_recursive,
+            output_buffer=output_buffer,
+            echo=echo,
+            dry_run=dry_run,
+        )
 
         stop = False
         for line, req, spec_ver, latest_ver in requirements:
@@ -271,10 +237,10 @@ def _internal_update_requirements(obuffer, updates, input_file=None,
                     stop = True
                     obuffer.write(line)
 
-            elif not output_file or not requirements_line(line, req):
+            elif not output_buffer or not requirements_line(line, req):
                 obuffer.write(line)
 
-            if not output_file or not requirements_line(line, req):
+            if not output_buffer or not requirements_line(line, req):
                 obuffer.write('\n')
 
     except InstallationError as e:
@@ -287,98 +253,167 @@ def _internal_update_requirements(obuffer, updates, input_file=None,
     PUR_GLOBAL_UPDATED += updated
 
 
-def _patch_pip(obuffer, updates, **options):
-    """Patch pip to also update nested requirements files.
-
-    :param obuffer:  Output buffer for new requirements file.
-    :param updates:  Dict for saving information about updated packages.
-    :param options:  Dict containing original command line arguments.
-    """
-
-    seen = []
-
-    def patched_parse_requirements(*args, **kwargs):
-        if not options['no_recursive']:
-            filename = args[0]
-            if filename not in seen:
-                if os.path.isfile(filename):
-                    seen.append(filename)
-                    buf = StringIO()
-                    _internal_update_requirements(
-                        buf, updates,
-                        input_file=filename,
-                        output_file=options['output_file'],
-                        force=options['force'],
-                        interactive=options['interactive'],
-                        skip=options['skip'],
-                        only=options['only'],
-                        minor=options['minor'],
-                        patch=options['patch'],
-                        pre=options['pre'],
-                        dry_run=options['dry_run'],
-                        no_recursive=options['no_recursive'],
-                        echo=options['echo'],
-                        index_urls=options['index_urls'],
-                        verify=options['verify'],
-                    )
-                    if not options['dry_run']:
-                        if options['output_file']:
-                            obuffer.write(buf.getvalue())
-                        else:
-                            with open(filename, 'w') as output:
-                                output.write(buf.getvalue())
-                    buf.close()
-        return []
-    req_file.parse_requirements = patched_parse_requirements
-
-
 def _get_requirements_and_latest(
         filename,
+        updates=[],
         force=False,
+        interactive=False,
         minor=[],
         patch=[],
         pre=[],
         index_urls=[],
-        verify=True):
+        cert=None,
+        no_ssl_verify=False,
+        no_recursive=False,
+        output_file=None,
+        output_buffer=None,
+        echo=False,
+        dry_run=False,
+    ):
     """Parse a requirements file and get latest version for each requirement.
 
     Yields a tuple of (original line, InstallRequirement instance,
     spec_versions, latest_version).
-
-    :param filename:   Path to a requirements.txt file.
-    :param force:      Force getting latest version even for packages without
-                       a version specified.
-    :param minor:      List of packages to only update minor and patch versions,
-                       never major.
-    :param patch:      List of packages to only update patch versions, never
-                       minor or major.
-    :param pre:        List of packages to allow updating to pre-release
-                       versions.
-    :param index_urls: List of base URLs of the Python Package Index.
-    :param verify:     Either a boolean true/false, in which case it controls
-                       whether we verify the server's TLS certificate, or a
-                       string, in which case it must be a path to a CA certs
-                       bundle. Defaults to True.
     """
-    session = PipSession()
-    if verify:
-        session.verify = verify
-    finder = PackageFinder(
+
+    index_urls = index_urls or [PyPI.simple_url]
+
+    session = PipSession(
+        index_urls=index_urls,
+    )
+    if cert:
+        session.verify = cert
+    if no_ssl_verify:
+        session.verify = False
+    session.auth.prompting = interactive
+
+    finder = build_package_finder(
         session=session,
-        find_links=[],
-        index_urls=index_urls or [PyPI.simple_url],
+        index_urls=index_urls,
+    )
+    if pre:
+        finder.set_allow_all_prereleases()
+
+
+    requirements = parse_requirements(
+        filename, finder, session,
+        updates=updates,
+        force=force,
+        interactive=interactive,
+        minor=minor,
+        patch=patch,
+        pre=pre,
+        index_urls=index_urls,
+        cert=cert,
+        no_ssl_verify=no_ssl_verify,
+        no_recursive=no_recursive,
+        output_file=output_file,
+        output_buffer=output_buffer,
+        echo=echo,
+        dry_run=dry_run,
     )
 
-    _, content = get_file_content(filename, session=session)
-    for line_number, line, orig_line in yield_lines(content):
-        line = req_file.COMMENT_RE.sub('', line)
-        line = line.strip()
-        req = parse_requirement_line(line, filename, line_number, session, finder)
-        if req is None or req.name is None or req_file.SCHEME_RE.match(req.name):
+    for parsed_req, orig_line in requirements:
+        if parsed_req is None:
             yield (orig_line, None, None, None)
             continue
-        spec_ver = current_version(req)
+
+        install_req = install_req_from_parsed_requirement(
+            parsed_req,
+            user_supplied=True,
+        )
+
+        if install_req.name is None or SCHEME_RE.match(install_req.name):
+            yield (orig_line, None, None, None)
+            continue
+        spec_ver = current_version(install_req)
         if spec_ver or force:
-            latest_ver = latest_version(req, spec_ver, session, finder,
-                                        minor=minor, patch=patch, pre=pre)
-            yield (orig_line, req, spec_ver, latest_ver)
+            latest_ver = latest_version(install_req, spec_ver, finder, minor=minor, patch=patch, pre=pre)
+            yield (orig_line, install_req, spec_ver, latest_ver)
+
+
+def parse_requirements(filename, finder, session, updates=None, **options):
+    line_parser = get_line_parser(finder)
+    parser = PatchedRequirementsFileParser(session, line_parser)
+    parser.pur_updates = updates
+    parser.pur_options = options
+
+    constraint = False
+    for parsed_line, orig_line in parser.parse(filename, constraint):
+        if parsed_line is None:
+            yield None, orig_line
+            continue
+        parsed_req = handle_line(
+            parsed_line,
+            finder=finder,
+            session=session
+        )
+        yield parsed_req, orig_line
+
+
+class PatchedRequirementsFileParser(RequirementsFileParser):
+
+    def _parse_and_recurse(self, filename, constraint):
+        for line, orig_line in self._parse_file(filename, constraint):
+            if (
+                line is not None and
+                not line.is_requirement and
+                (line.opts.requirements or line.opts.constraints)
+            ):
+                # parse a nested requirements file
+                if line.opts.requirements:
+                    req_path = line.opts.requirements[0]
+                else:
+                    req_path = line.opts.constraints[0]
+
+                if self.pur_options['no_recursive'] or SCHEME_RE.search(req_path):
+                    yield None, orig_line
+                    continue
+
+                req_path = os.path.join(
+                    os.path.dirname(filename), req_path,
+                )
+
+                buf = StringIO()
+
+                _update_requirements(
+                    buf, self.pur_updates,
+                    input_file=req_path,
+                    **self.pur_options,
+                )
+
+                if not self.pur_options['dry_run']:
+                    if self.pur_options['output_buffer']:
+                        self.pur_options['output_buffer'].write(buf.getvalue())
+                    else:
+                        with open(req_path, 'w') as output:
+                            output.write(buf.getvalue())
+
+                buf.close()
+
+                if not self.pur_options['output_file']:
+                    yield None, orig_line
+            else:
+                yield line, orig_line
+
+    def _parse_file(self, filename, constraint):
+        _, content = get_file_content(filename, self._session)
+
+        lines_enum = enumerate(content.splitlines(), start=1)
+        lines_enum = join_lines(lines_enum)
+
+        for line_number, line, orig_line in lines_enum:
+            line = COMMENT_RE.sub('', line)
+            try:
+                args_str, opts = self._line_parser(line)
+            except OptionParsingError as e:
+                yield None, orig_line
+                continue
+
+            yield ParsedLine(
+                filename,
+                line_number,
+                args_str,
+                opts,
+                constraint,
+            ), orig_line
