@@ -9,7 +9,6 @@
 
 
 import os
-import re
 import sys
 from collections import defaultdict
 
@@ -50,6 +49,10 @@ from .utils import (ExitCodeException, build_package_finder, can_check_version,
                     current_version, format_list_arg, join_lines,
                     latest_version, old_version, requirements_line,
                     should_update, update_requirement_line)
+
+
+__all__ = ["update_requirements"]
+
 
 PUR_GLOBAL_UPDATED = 0
 
@@ -116,13 +119,9 @@ def pur(**options):
     global PUR_GLOBAL_UPDATED
     PUR_GLOBAL_UPDATED = 0
 
-    obuffer = StringIO()
-    updates = defaultdict(list)
-
-    _update_requirements(
-        obuffer, updates,
+    update_requirements(
         input_file=options['requirement'],
-        output_buffer=obuffer if options['output'] else None,
+        output_file=options['output'],
         force=options['force'],
         interactive=options['interactive'],
         skip=options['skip'],
@@ -139,15 +138,6 @@ def pur(**options):
     )
 
     if not options['dry_run']:
-        output_file = options['output']
-        if not output_file:
-            output_file = options['requirement']
-        with open(output_file, 'w') as output:
-            output.write(obuffer.getvalue())
-
-    obuffer.close()
-
-    if not options['dry_run']:
         _echo('All requirements up-to-date.')
 
     if options['nonzero_exit_code']:
@@ -156,16 +146,77 @@ def pur(**options):
         raise ExitCodeException(10)
 
 
+def update_requirements(input_file=None, output_file=None, force=False,
+                        interactive=False, skip=[], only=[], dry_run=False,
+                        minor=[], patch=[], pre=[], no_recursive=False,
+                        echo=False, index_urls=[], cert=None,
+                        no_ssl_verify=False):
+    """Update a requirements file.
+    Returns a dict of package update info.
+    :param input_file:    Path to a requirements.txt file.
+    :param output_file:   Path to the output requirements.txt file.
+    :param force:         Force updating packages even when a package has no
+                          version specified in the input requirements.txt file.
+    :param interactive:   Interactively prompts before updating each package.
+    :param dry_run:       Output changes to STDOUT instead of overwriting the
+                          requirements.txt file.
+    :param no_recursive:  Prevents updating nested requirements files.
+    :param skip:          List of packages to skip updating.
+    :param only:          List of packages to update, skipping all others.
+    :param minor:         List of packages to only update minor and patch
+                          versions, never major.
+    :param patch:         List of packages to only update patch versions, never
+                          minor or major.
+    :param pre:           List of packages to allow updating to pre-release
+                          versions.
+    :param index_urls:    List of PyPI index urls.
+    :param cert:          Path to PEM-encoded CA certificate bundle. If
+                          provided, overrides the default.
+    :param no_ssl_verify: Disable verifying the server's TLS certificate.
+    """
+
+    obuffer = StringIO()
+    updates = defaultdict(list)
+
+    _update_requirements(
+        obuffer, updates,
+        input_file=input_file,
+        output_buffer=obuffer if output_file else None,
+        force=force,
+        interactive=interactive,
+        skip=skip,
+        only=only,
+        minor=minor,
+        patch=patch,
+        pre=pre,
+        dry_run=dry_run,
+        no_recursive=no_recursive,
+        echo=echo,
+        index_urls=index_urls,
+        cert=cert,
+        no_ssl_verify=no_ssl_verify,
+    )
+
+    if not dry_run:
+        if not output_file:
+            output_file = input_file
+        with open(output_file, 'w') as output:
+            output.write(obuffer.getvalue())
+
+    obuffer.close()
+    return updates
+
+
 def _update_requirements(obuffer, updates, input_file=None,
-                                  output_buffer=None, 
-                                  output_file=None,
-                                  force=False,
-                                  interactive=False, skip=[], only=[],
-                                  minor=[], patch=[], pre=[],
-                                  no_recursive=False,
-                                  dry_run=False, echo=False,
-                                  index_urls=[], cert=None,
-                                  no_ssl_verify=False):
+                         output_buffer=None,
+                         output_file=None,
+                         force=False,
+                         interactive=False, skip=[], only=[],
+                         minor=[], patch=[], pre=[],
+                         no_recursive=False,
+                         dry_run=False, echo=False,
+                         index_urls=[], cert=None,
+                         no_ssl_verify=False):
     global PUR_GLOBAL_UPDATED
 
     updated = 0
@@ -253,23 +304,12 @@ def _update_requirements(obuffer, updates, input_file=None,
     PUR_GLOBAL_UPDATED += updated
 
 
-def _get_requirements_and_latest(
-        filename,
-        updates=[],
-        force=False,
-        interactive=False,
-        minor=[],
-        patch=[],
-        pre=[],
-        index_urls=[],
-        cert=None,
-        no_ssl_verify=False,
-        no_recursive=False,
-        output_file=None,
-        output_buffer=None,
-        echo=False,
-        dry_run=False,
-    ):
+def _get_requirements_and_latest(filename, updates=[], force=False,
+                                 interactive=False, minor=[], patch=[], pre=[],
+                                 index_urls=[], cert=None, no_ssl_verify=False,
+                                 no_recursive=False, output_file=None,
+                                 output_buffer=None, echo=False,
+                                 dry_run=False):
     """Parse a requirements file and get latest version for each requirement.
 
     Yields a tuple of (original line, InstallRequirement instance,
@@ -294,8 +334,7 @@ def _get_requirements_and_latest(
     if pre:
         finder.set_allow_all_prereleases()
 
-
-    requirements = parse_requirements(
+    requirements = _parse_requirements(
         filename, finder, session,
         updates=updates,
         force=force,
@@ -332,7 +371,7 @@ def _get_requirements_and_latest(
             yield (orig_line, install_req, spec_ver, latest_ver)
 
 
-def parse_requirements(filename, finder, session, updates=None, **options):
+def _parse_requirements(filename, finder, session, updates=None, **options):
     line_parser = get_line_parser(finder)
     parser = PatchedRequirementsFileParser(session, line_parser)
     parser.pur_updates = updates
@@ -406,7 +445,7 @@ class PatchedRequirementsFileParser(RequirementsFileParser):
             line = COMMENT_RE.sub('', line)
             try:
                 args_str, opts = self._line_parser(line)
-            except OptionParsingError as e:
+            except OptionParsingError:
                 yield None, orig_line
                 continue
 
