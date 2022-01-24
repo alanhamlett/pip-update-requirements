@@ -3,6 +3,13 @@ History
 -------
 
 
+6.0.1 (2022-01-24)
+++++++++++++++++++
+
+- Add back public update_requirements export.
+  `#44 <https://github.com/alanhamlett/pip-update-requirements/issues/44>`_
+
+
 6.0.0 (2022-01-23)
 ++++++++++++++++++
 
