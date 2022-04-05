@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.7', '3.8', '3.9']
+        python-version: ['3.7', '3.8', '3.9', '3.10']
     name: Run Tests with Python ${{ matrix.python-version }}
     steps:
       -
@@ -25,13 +25,10 @@ jobs:
         run: pip install -r dev-requirements.txt
       -
         name: Unit tests
-        run: nosetests
+        run: pytest --cov=./pur --cov-report=xml
       -
-        name: Coverage
-        run: coverage xml
-      -
-        name: Report Coverage
-        uses: codecov/codecov-action@v1
+        name: Upload Coverage
+        uses: codecov/codecov-action@v2
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           flags: unittests
