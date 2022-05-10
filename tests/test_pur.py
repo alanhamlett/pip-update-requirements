@@ -174,10 +174,9 @@ class PurTestCase(utils.TestCase):
             mock_find_all_candidates.return_value = [candidate]
 
             result = self.runner.invoke(pur, args)
-            self.assertEqual(result.exception.code, 10)
             expected_output = "All requirements up-to-date.\n"
             self.assertEqual(u(result.output), u(expected_output))
-            self.assertEqual(result.exit_code, 10)
+            self.assertEqual(result.exit_code, 0)
             expected_requirements = open('tests/samples/results/test_updates_package').read()
             self.assertEqual(open(requirements).read(), expected_requirements)
 
@@ -195,10 +194,10 @@ class PurTestCase(utils.TestCase):
             mock_find_all_candidates.return_value = [candidate]
 
             result = self.runner.invoke(pur, args)
-            self.assertEqual(result.exception.code, 11)
+            self.assertEqual(result.exception.code, 1)
             expected_output = "Updated flask: 0.9 -> 0.10.1\nAll requirements up-to-date.\n"
             self.assertEqual(u(result.output), u(expected_output))
-            self.assertEqual(result.exit_code, 11)
+            self.assertEqual(result.exit_code, 1)
             expected_requirements = open('tests/samples/results/test_updates_package').read()
             self.assertEqual(open(requirements).read(), expected_requirements)
 
@@ -218,10 +217,10 @@ class PurTestCase(utils.TestCase):
             mock_find_all_candidates.return_value = [candidate]
 
             result = self.runner.invoke(pur, args)
-            self.assertEqual(result.exception.code, 11)
+            self.assertEqual(result.exception.code, 1)
             expected_output = "Updated readtime: 0.9 -> 0.10.1\nAll requirements up-to-date.\n"
             self.assertEqual(u(result.output), u(expected_output))
-            self.assertEqual(result.exit_code, 11)
+            self.assertEqual(result.exit_code, 1)
             expected_requirements = open('tests/samples/results/test_updates_package_in_nested_requirements').read()
             self.assertEqual(open(requirements).read(), expected_requirements)
             expected_requirements = open('tests/samples/results/test_updates_package_in_nested_requirements_nested').read()
@@ -603,10 +602,29 @@ class PurTestCase(utils.TestCase):
             with self.cd(tempdir):
                 result = self.runner.invoke(pur, args)
 
-            self.assertEqual(result.exception.code, 1)
+            self.assertEqual(result.exception.code, 2)
             expected_output = "Error: Could not open requirements file: [Errno 2] No such file or directory: 'requirements.txt'\n"
             self.assertEqual(u(result.output), u(expected_output))
-            self.assertEqual(result.exit_code, 1)
+            self.assertEqual(result.exit_code, 2)
+
+    def test_missing_requirements_file(self):
+        tempdir = tempfile.mkdtemp()
+        args = ['-r', 'missing.txt']
+
+        with patch('pip._internal.index.package_finder.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+            project = 'flask'
+            version = '0.10.1'
+            link = Link('')
+            candidate = InstallationCandidate(project, version, link)
+            mock_find_all_candidates.return_value = [candidate]
+
+            with self.cd(tempdir):
+                result = self.runner.invoke(pur, args)
+
+            self.assertEqual(result.exception.code, 2)
+            expected_output = "Error: Could not open requirements file: [Errno 2] No such file or directory: 'missing.txt'\n"
+            self.assertEqual(u(result.output), u(expected_output))
+            self.assertEqual(result.exit_code, 2)
 
     def test_updates_package_with_number_in_name(self):
         tempdir = tempfile.mkdtemp()

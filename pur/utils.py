@@ -330,8 +330,10 @@ def format_list_arg(options, key):
 
 
 class ExitCodeException(click.ClickException):
-    def __init__(self, exit_code):
+    def __init__(self, exit_code, message=None):
         self.exit_code = exit_code
+        self.message = message
 
-    def show(self):
-        pass
+    def show(self, **kwargs):
+        if self.message:
+            super().show(**kwargs)

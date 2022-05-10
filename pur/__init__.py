@@ -10,6 +10,7 @@
 
 import os
 import sys
+import traceback
 from collections import defaultdict
 
 import click
@@ -98,9 +99,11 @@ PUR_GLOBAL_UPDATED = 0
               'versions. By default packages are only updated to stable ' +
               'versions.')
 @click.option('-z', '--nonzero-exit-code', is_flag=True, default=False,
-              help='Exit with status 10 when all packages up-to-date, 11 ' +
-              'when some packages were updated. Defaults to exit status zero ' +
-              'on success and non-zero on failure.')
+              help='Exit with status 1 when some packages were updated, 0 ' +
+              'when no packages updated, or a number greater than 1 when ' +
+              'there was an error. By default, exit status 0 is used unless ' +
+              'there was an error irregardless of whether packages were ' +
+              'or not updated.')
 @click.version_option(__version__)
 def pur(**options):
     """Command line entry point."""
@@ -119,31 +122,37 @@ def pur(**options):
     global PUR_GLOBAL_UPDATED
     PUR_GLOBAL_UPDATED = 0
 
-    update_requirements(
-        input_file=options['requirement'],
-        output_file=options['output'],
-        force=options['force'],
-        interactive=options['interactive'],
-        skip=options['skip'],
-        only=options['only'],
-        minor=options['minor'],
-        patch=options['patch'],
-        pre=options['pre'],
-        dry_run=options['dry_run'],
-        no_recursive=options['no_recursive'],
-        echo=options['echo'],
-        index_urls=options['index_url'],
-        cert=options['cert'],
-        no_ssl_verify=options['no_ssl_verify'],
-    )
+    try:
+        update_requirements(
+            input_file=options['requirement'],
+            output_file=options['output'],
+            force=options['force'],
+            interactive=options['interactive'],
+            skip=options['skip'],
+            only=options['only'],
+            minor=options['minor'],
+            patch=options['patch'],
+            pre=options['pre'],
+            dry_run=options['dry_run'],
+            no_recursive=options['no_recursive'],
+            echo=options['echo'],
+            index_urls=options['index_url'],
+            cert=options['cert'],
+            no_ssl_verify=options['no_ssl_verify'],
+        )
+
+    except InstallationError as e:
+        raise ExitCodeException(2, message=str(e))
+    except:
+        if options['nonzero_exit_code'] or True:
+            raise ExitCodeException(70, message=traceback.format_exc().rstrip())
+        raise
 
     if not options['dry_run']:
         _echo('All requirements up-to-date.')
 
-    if options['nonzero_exit_code']:
-        if PUR_GLOBAL_UPDATED > 0:
-            raise ExitCodeException(11)
-        raise ExitCodeException(10)
+    if options['nonzero_exit_code'] and PUR_GLOBAL_UPDATED > 0:
+        raise ExitCodeException(1)
 
 
 def update_requirements(input_file=None, output_file=None, force=False,
@@ -221,81 +230,77 @@ def _update_requirements(obuffer, updates, input_file=None,
 
     updated = 0
 
-    try:
-        requirements = _get_requirements_and_latest(
-            input_file,
-            updates=updates,
-            force=force,
-            interactive=interactive,
-            minor=minor,
-            patch=patch,
-            pre=pre,
-            index_urls=index_urls,
-            cert=cert,
-            no_ssl_verify=no_ssl_verify,
-            no_recursive=no_recursive,
-            output_buffer=output_buffer,
-            echo=echo,
-            dry_run=dry_run,
-        )
+    requirements = _get_requirements_and_latest(
+        input_file,
+        updates=updates,
+        force=force,
+        interactive=interactive,
+        minor=minor,
+        patch=patch,
+        pre=pre,
+        index_urls=index_urls,
+        cert=cert,
+        no_ssl_verify=no_ssl_verify,
+        no_recursive=no_recursive,
+        output_buffer=output_buffer,
+        echo=echo,
+        dry_run=dry_run,
+    )
 
-        stop = False
-        for line, req, spec_ver, latest_ver in requirements:
+    stop = False
+    for line, req, spec_ver, latest_ver in requirements:
 
-            if not stop and can_check_version(req, skip, only):
+        if not stop and can_check_version(req, skip, only):
 
-                try:
-                    if should_update(req, spec_ver, latest_ver, force=force,
-                                     interactive=interactive):
+            try:
+                if should_update(req, spec_ver, latest_ver, force=force,
+                                 interactive=interactive):
 
-                        if not spec_ver[0]:
-                            new_line = '{0}=={1}'.format(line, latest_ver)
-                        else:
-                            new_line = update_requirement_line(req, line,
-                                                               spec_ver,
-                                                               latest_ver)
-                        obuffer.write(new_line)
-
-                        if new_line != line:
-                            msg = 'Updated {package}: {old} -> {new}'.format(
-                                package=req.name,
-                                old=old_version(spec_ver),
-                                new=latest_ver,
-                            )
-                            updated += 1
-                            was_updated = True
-                        else:
-                            msg = 'New version for {package} found ({new}), ' \
-                                  'but current spec prohibits updating: ' \
-                                  '{line}'.format(package=req.name,
-                                                  new=latest_ver,
-                                                  line=line)
-                            was_updated = False
-
-                        updates[req.name].append({
-                            'package': req.name,
-                            'current': old_version(spec_ver),
-                            'latest': latest_ver,
-                            'updated': was_updated,
-                            'message': msg,
-                        })
-                        if echo and not dry_run:
-                            _echo(msg)
-
+                    if not spec_ver[0]:
+                        new_line = '{0}=={1}'.format(line, latest_ver)
                     else:
-                        obuffer.write(line)
-                except StopUpdating:
-                    stop = True
-                    obuffer.write(line)
+                        new_line = update_requirement_line(req, line,
+                                                           spec_ver,
+                                                           latest_ver)
+                    obuffer.write(new_line)
 
-            elif not output_buffer or not requirements_line(line, req):
+                    if new_line != line:
+                        msg = 'Updated {package}: {old} -> {new}'.format(
+                            package=req.name,
+                            old=old_version(spec_ver),
+                            new=latest_ver,
+                        )
+                        updated += 1
+                        was_updated = True
+                    else:
+                        msg = 'New version for {package} found ({new}), ' \
+                              'but current spec prohibits updating: ' \
+                              '{line}'.format(package=req.name,
+                                              new=latest_ver,
+                                              line=line)
+                        was_updated = False
+
+                    updates[req.name].append({
+                        'package': req.name,
+                        'current': old_version(spec_ver),
+                        'latest': latest_ver,
+                        'updated': was_updated,
+                        'message': msg,
+                    })
+                    if echo and not dry_run:
+                        _echo(msg)
+
+                else:
+                    obuffer.write(line)
+            except StopUpdating:
+                stop = True
                 obuffer.write(line)
 
-            if not output_buffer or not requirements_line(line, req):
-                obuffer.write('\n')
+        elif not output_buffer or not requirements_line(line, req):
+            obuffer.write(line)
 
-    except InstallationError as e:
-        raise click.ClickException(str(e))
+        if not output_buffer or not requirements_line(line, req):
+            obuffer.write('\n')
 
     if dry_run and echo:
         _echo('==> ' + (output_file or input_file) + ' <==')
