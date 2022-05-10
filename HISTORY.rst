@@ -3,6 +3,13 @@ History
 -------
 
 
+7.0.0 (2022-05-09)
+++++++++++++++++++
+
+- Exit with status zero when no packages updated, even with --nonzero-exit-code.
+  `#27 <https://github.com/alanhamlett/pip-update-requirements/issues/27>`_
+
+
 6.1.0 (2022-04-05)
 ++++++++++++++++++
 
