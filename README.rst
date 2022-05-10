@@ -106,10 +106,12 @@ Options
                          packages to be updated to pre-release versions. By
                          default packages are only updated to stable
                          versions.
--z, --nonzero-exit-code  Exit with status 10 when all packages up-to-date,
-                         11 when some packages were updated. Defaults to
-                         exit status zero on success and non-zero on
-                         failure.
+-z, --nonzero-exit-code  Exit with status 1 when some packages were updated,
+                         0 when no packages updated, or a number greater
+                         than 1 when there was an error. By default, exit
+                         status 0 is used unless there was an error
+                         irregardless of whether packages were or not
+                         updated.
 --version                Show the version and exit.
 --help                   Show this message and exit.
 
