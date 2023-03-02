@@ -1,4 +1,4 @@
-.. image:: https://img.shields.io/github/workflow/status/alanhamlett/pip-update-requirements/Tests/master?label=tests
+.. image:: https://img.shields.io/github/actions/workflow/status/alanhamlett/pip-update-requirements/tests.yml?branch=master
     :target: https://github.com/alanhamlett/pip-update-requirements/actions
     :alt: Tests
 
