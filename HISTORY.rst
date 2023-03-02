@@ -3,6 +3,13 @@ History
 -------
 
 
+7.1.0 (2023-03-02)
+++++++++++++++++++
+
+- New command line options --skip-gt and --dry-run-changed.
+  `#50 <https://github.com/alanhamlett/pip-update-requirements/issues/50>`_
+
+
 7.0.0 (2022-05-09)
 ++++++++++++++++++
 
