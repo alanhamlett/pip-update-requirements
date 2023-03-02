@@ -73,10 +73,16 @@ PUR_GLOBAL_UPDATED = 0
 @click.option('-d', '--dry-run', is_flag=True, default=False,
               help='Output changes to STDOUT instead of overwriting the ' +
               'requirements.txt file.')
+@click.option('--dry-run-changed', is_flag=True, default=False,
+              help='When running with --dry-run, only output packages ' +
+              'with updates, not packages that are already the latest.')
 @click.option('-n', '--no-recursive', is_flag=True, default=False,
               help='Prevents updating nested requirements files.')
 @click.option('--skip', type=click.STRING, help='Comma separated list ' +
               'of packages to skip updating.')
+@click.option('--skip-gt', is_flag=True, default=False,
+              help='Skip updating packages using > or >= spec, to allow ' +
+              'specifying minimum supported versions of packages.')
 @click.option('--index-url', type=click.STRING, multiple=True, help='Base ' +
               'URL of the Python Package Index. Can be provided multiple ' +
               'times for extra index urls.')
@@ -129,11 +135,13 @@ def pur(**options):
             force=options['force'],
             interactive=options['interactive'],
             skip=options['skip'],
+            skip_gt=options['skip_gt'],
             only=options['only'],
             minor=options['minor'],
             patch=options['patch'],
             pre=options['pre'],
             dry_run=options['dry_run'],
+            dry_run_changed=options['dry_run'] and options['dry_run_changed'],
             no_recursive=options['no_recursive'],
             echo=options['echo'],
             index_urls=options['index_url'],
@@ -156,32 +164,35 @@ def pur(**options):
 
 
 def update_requirements(input_file=None, output_file=None, force=False,
-                        interactive=False, skip=[], only=[], dry_run=False,
+                        interactive=False, skip=[], skip_gt=False, only=[],
+                        dry_run=False, dry_run_changed=False,
                         minor=[], patch=[], pre=[], no_recursive=False,
                         echo=False, index_urls=[], cert=None,
                         no_ssl_verify=False):
     """Update a requirements file.
     Returns a dict of package update info.
-    :param input_file:    Path to a requirements.txt file.
-    :param output_file:   Path to the output requirements.txt file.
-    :param force:         Force updating packages even when a package has no
-                          version specified in the input requirements.txt file.
-    :param interactive:   Interactively prompts before updating each package.
-    :param dry_run:       Output changes to STDOUT instead of overwriting the
-                          requirements.txt file.
-    :param no_recursive:  Prevents updating nested requirements files.
-    :param skip:          List of packages to skip updating.
-    :param only:          List of packages to update, skipping all others.
-    :param minor:         List of packages to only update minor and patch
-                          versions, never major.
-    :param patch:         List of packages to only update patch versions, never
-                          minor or major.
-    :param pre:           List of packages to allow updating to pre-release
-                          versions.
-    :param index_urls:    List of PyPI index urls.
-    :param cert:          Path to PEM-encoded CA certificate bundle. If
-                          provided, overrides the default.
-    :param no_ssl_verify: Disable verifying the server's TLS certificate.
+    :param input_file:       Path to a requirements.txt file.
+    :param output_file:      Path to the output requirements.txt file.
+    :param force:            Force updating packages even when a package has no
+                             version specified in the input requirements.txt file.
+    :param interactive:      Interactively prompts before updating each package.
+    :param dry_run:          Output changes to STDOUT instead of overwriting the
+                             requirements.txt file.
+    :param dry_run_changed:  Output only packages with a new version available.
+    :param no_recursive:     Prevents updating nested requirements files.
+    :param skip:             List of packages to skip updating.
+    :param skip_gt:          Skip updating packages using > or >= version spec.
+    :param only:             List of packages to update, skipping all others.
+    :param minor:            List of packages to only update minor and patch
+                             versions, never major.
+    :param patch:            List of packages to only update patch versions, never
+                             minor or major.
+    :param pre:              List of packages to allow updating to pre-release
+                             versions.
+    :param index_urls:       List of PyPI index urls.
+    :param cert:             Path to PEM-encoded CA certificate bundle. If
+                             provided, overrides the default.
+    :param no_ssl_verify:    Disable verifying the server's TLS certificate.
     """
 
     obuffer = StringIO()
@@ -194,11 +205,13 @@ def update_requirements(input_file=None, output_file=None, force=False,
         force=force,
         interactive=interactive,
         skip=skip,
+        skip_gt=skip_gt,
         only=only,
         minor=minor,
         patch=patch,
         pre=pre,
         dry_run=dry_run,
+        dry_run_changed=dry_run_changed,
         no_recursive=no_recursive,
         echo=echo,
         index_urls=index_urls,
@@ -219,13 +232,12 @@ def update_requirements(input_file=None, output_file=None, force=False,
 def _update_requirements(obuffer, updates, input_file=None,
                          output_buffer=None,
                          output_file=None,
-                         force=False,
-                         interactive=False, skip=[], only=[],
+                         force=False, interactive=False,
+                         skip=[], skip_gt=False, only=[],
                          minor=[], patch=[], pre=[],
-                         no_recursive=False,
-                         dry_run=False, echo=False,
-                         index_urls=[], cert=None,
-                         no_ssl_verify=False):
+                         dry_run=False, dry_run_changed=False,
+                         echo=False, index_urls=[], cert=None,
+                         no_recursive=False, no_ssl_verify=False):
     global PUR_GLOBAL_UPDATED
 
     updated = 0
@@ -245,12 +257,13 @@ def _update_requirements(obuffer, updates, input_file=None,
         output_buffer=output_buffer,
         echo=echo,
         dry_run=dry_run,
+        dry_run_changed=dry_run_changed,
     )
 
     stop = False
     for line, req, spec_ver, latest_ver in requirements:
 
-        if not stop and can_check_version(req, skip, only):
+        if not stop and can_check_version(req, spec_ver, skip, skip_gt, only):
 
             try:
                 if should_update(req, spec_ver, latest_ver, force=force,
@@ -290,21 +303,26 @@ def _update_requirements(obuffer, updates, input_file=None,
                     if echo and not dry_run:
                         _echo(msg)
 
-                else:
+                elif not dry_run_changed:
                     obuffer.write(line)
             except StopUpdating:
                 stop = True
-                obuffer.write(line)
+                if not dry_run_changed:
+                    obuffer.write(line)
 
         elif not output_buffer or not requirements_line(line, req):
-            obuffer.write(line)
+            if not dry_run_changed:
+                obuffer.write(line)
 
         if not output_buffer or not requirements_line(line, req):
-            obuffer.write('\n')
+            if not dry_run_changed:
+                obuffer.write('\n')
 
     if dry_run and echo:
-        _echo('==> ' + (output_file or input_file) + ' <==')
-        _echo(obuffer.getvalue())
+        changes = obuffer.getvalue()
+        if not dry_run_changed or changes:
+            _echo('==> ' + (output_file or input_file) + ' <==')
+            _echo(changes)
 
     PUR_GLOBAL_UPDATED += updated
 
@@ -314,7 +332,7 @@ def _get_requirements_and_latest(filename, updates=[], force=False,
                                  index_urls=[], cert=None, no_ssl_verify=False,
                                  no_recursive=False, output_file=None,
                                  output_buffer=None, echo=False,
-                                 dry_run=False):
+                                 dry_run=False, dry_run_changed=False):
     """Parse a requirements file and get latest version for each requirement.
 
     Yields a tuple of (original line, InstallRequirement instance,
@@ -355,6 +373,7 @@ def _get_requirements_and_latest(filename, updates=[], force=False,
         output_buffer=output_buffer,
         echo=echo,
         dry_run=dry_run,
+        dry_run_changed=dry_run_changed,
     )
 
     for parsed_req, orig_line in requirements:

@@ -182,8 +182,11 @@ def latest_version(req, spec_ver, finder, minor=[], patch=[], pre=[]):
     return best_candidate.version
 
 
-def can_check_version(req, skip, only):
+def can_check_version(req, spec_ver, skip, skip_gt, only):
     if not req:
+        return False
+
+    if skip_gt and (spec_ver[2] or spec_ver[3]):
         return False
 
     if req.name.lower() in skip:
@@ -208,6 +211,8 @@ def should_update(req, spec_ver, latest_ver, force=False, interactive=False):
 
     ver = spec_ver[0]
     eq_ver = spec_ver[1]
+    gt_ver = spec_ver[2]
+    gte_ver = spec_ver[3]
     lt_ver = spec_ver[4]
     lte_ver = spec_ver[5]
     not_ver = spec_ver[6]
@@ -216,6 +221,12 @@ def should_update(req, spec_ver, latest_ver, force=False, interactive=False):
         return False
 
     if eq_ver is not None and latest_ver <= eq_ver:
+        return False
+
+    if gt_ver is not None and latest_ver <= gt_ver:
+        return False
+
+    if gte_ver is not None and latest_ver <= gte_ver:
         return False
 
     if not_ver is not None and latest_ver == not_ver:
