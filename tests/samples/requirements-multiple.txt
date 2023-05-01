@@ -1,4 +1,4 @@
-flask==0.9
+flask==2.3.2
 Alembic==0.9
 sqlalchemy==0.9
 # an empty line below

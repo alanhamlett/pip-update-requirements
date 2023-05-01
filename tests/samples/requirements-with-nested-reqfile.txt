@@ -1,5 +1,5 @@
 flask==0.10.1
-flask==12.0
+flask==2.3.2
 # a comment
 -r requirements-nested.txt
 # an empty line below
