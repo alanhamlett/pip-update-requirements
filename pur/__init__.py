@@ -263,7 +263,7 @@ def _update_requirements(obuffer, updates, input_file=None,
     stop = False
     for line, req, spec_ver, latest_ver in requirements:
 
-        if not stop and can_check_version(req, spec_ver, skip, skip_gt, only):
+        if not stop and latest_ver and can_check_version(req, spec_ver, skip, skip_gt, only):
 
             try:
                 if should_update(req, spec_ver, latest_ver, force=force,
@@ -309,6 +309,13 @@ def _update_requirements(obuffer, updates, input_file=None,
                 stop = True
                 if not dry_run_changed:
                     obuffer.write(line)
+
+        elif not latest_ver and not output_buffer:
+            if not dry_run_changed:
+                msg = 'Package {package} not found'.format(package=req.name)
+                if echo and not dry_run:
+                        _echo(msg)
+                obuffer.write(line)
 
         elif not output_buffer or not requirements_line(line, req):
             if not dry_run_changed:
