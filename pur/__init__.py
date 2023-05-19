@@ -312,7 +312,12 @@ def _update_requirements(obuffer, updates, input_file=None,
 
         elif not latest_ver and not output_buffer:
             if not dry_run_changed:
-                msg = 'Package {package} not found'.format(package=req.name)
+                msg = 'Could not find a version that satisfies the ' \
+                      'requirement {package} (from -r req.txt (line 1))' \
+                      ' (from versions: {version})'.format(
+                    package=req.name,
+                    version=latest_ver
+                    )
                 if echo and not dry_run:
                         _echo(msg)
                 obuffer.write(line)
