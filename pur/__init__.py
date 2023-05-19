@@ -312,9 +312,9 @@ def _update_requirements(obuffer, updates, input_file=None,
 
         elif not latest_ver and not output_buffer:
             if not dry_run_changed:
-                msg = 'Could not find a version that satisfies the ' \
+                msg = '\033[91mCould not find a version that satisfies the ' \
                       'requirement {package} (from -r req.txt (line 1))' \
-                      ' (from versions: {version})'.format(
+                      ' (from versions: {version})\033[0m'.format(
                     package=req.name,
                     version=latest_ver
                     )
