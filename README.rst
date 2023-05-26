@@ -86,7 +86,7 @@ Options
                          file.
 -d, --dry-run            Output changes to STDOUT instead of overwriting the
                          requirements.txt file.
---dry-run-changed        When running with --dry-run, only output packages
+--dry-run-changed        When running with --dry-run-changed, only output packages
                          with updates, not packages that are already the
                          latest.
 -n, --no-recursive       Prevents updating nested requirements files.
