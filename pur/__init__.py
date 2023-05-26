@@ -318,7 +318,7 @@ def _update_requirements(obuffer, updates, input_file=None,
                     package=req.name,
                     version=latest_ver
                     )
-                if echo and not dry_run:
+                if echo:
                         _echo(msg)
                 obuffer.write(line)
 
