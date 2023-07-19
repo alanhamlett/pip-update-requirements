@@ -1,4 +1,4 @@
-.PHONY: all test upgrade release
+.PHONY: all test upgrade clean build upload
 
 all:
 	@echo 'test     run the unit tests with the current default python'
@@ -11,5 +11,13 @@ test:
 upgrade:
 	@pur -s click -r dev-requirements.txt
 
-release:
-	@python ./setup.py sdist upload
+release: clean build upload
+
+clean:
+	@rm -f dist/*
+
+build:
+	@python ./setup.py sdist
+
+upload:
+	@twine upload ./dist/*
