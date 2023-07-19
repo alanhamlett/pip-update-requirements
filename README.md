@@ -1,53 +1,31 @@
-.. image:: https://img.shields.io/github/actions/workflow/status/alanhamlett/pip-update-requirements/tests.yml?branch=master
-    :target: https://github.com/alanhamlett/pip-update-requirements/actions
-    :alt: Tests
+[![Tests](https://img.shields.io/github/actions/workflow/status/alanhamlett/pip-update-requirements/tests.yml?branch=master)](https://github.com/alanhamlett/pip-update-requirements/actions)
+[![Coverage](https://codecov.io/gh/alanhamlett/pip-update-requirements/branch/master/graph/badge.svg?token=Ob1I7eMhiS)](https://codecov.io/gh/alanhamlett/pip-update-requirements)
+[![Version](https://img.shields.io/pypi/v/pur.svg)](https://pypi.python.org/pypi/pur)
+[![Supported Python Versions](https://img.shields.io/pypi/pyversions/pur.svg)](https://pypi.python.org/pypi/pur)
+[![WakaTime](https://wakatime.com/badge/github/alanhamlett/pip-update-requirements.svg)](https://wakatime.com/)
 
-.. image:: https://codecov.io/gh/alanhamlett/pip-update-requirements/branch/master/graph/badge.svg?token=Ob1I7eMhiS
-    :target: https://codecov.io/gh/alanhamlett/pip-update-requirements
-    :alt: Coverage
+# pip-update-requirements
 
-.. image:: https://img.shields.io/pypi/v/pur.svg
-    :target: https://pypi.python.org/pypi/pur
-    :alt: Version
+Update the packages in a `requirements.txt` file.
 
-.. image:: https://img.shields.io/pypi/pyversions/pur.svg
-    :target: https://pypi.python.org/pypi/pur
-    :alt: Supported Python Versions
+![Purring Cat](https://raw.githubusercontent.com/alanhamlett/pip-update-requirements/master/pur.gif)
 
-.. image:: https://wakatime.com/badge/github/alanhamlett/pip-update-requirements.svg
-    :target: https://wakatime.com/badge/github/alanhamlett/pip-update-requirements
-
-
-pip-update-requirements
-=======================
-
-Update the packages in a ``requirements.txt`` file.
-
-.. image:: https://raw.githubusercontent.com/alanhamlett/pip-update-requirements/master/pur.gif
-    :alt: Purring Cat
-
-
-Installation
-------------
-
-::
+## Installation
 
     pip install pur
 
+## Usage
 
-Usage
------
-
-Give pur your ``requirements.txt`` file and it updates all your packages to
+Give pur your `requirements.txt` file and it updates all your packages to
 the latest versions.
 
-For example, given a ``requirements.txt`` file::
+For example, given a `requirements.txt` file:
 
     flask==0.9
     sqlalchemy==0.9.10
     alembic==0.8.4
 
-Running pur on that file updates the packages to current latest versions::
+Running pur on that file updates the packages to current latest versions:
 
     $ pur -r requirements.txt
     Updated flask: 0.9 -> 1.0.2
@@ -57,9 +35,9 @@ Running pur on that file updates the packages to current latest versions::
 
 
 Pur never modifies your environment or installed packages, it only modifies
-your ``requirements.txt`` file.
+your `requirements.txt` file.
 
-You can also use Pur directly from Python::
+You can also use Pur directly from Python:
 
     $ python
     Python 3.6.1
@@ -72,8 +50,7 @@ You can also use Pur directly from Python::
     alembic==0.9.9
 
 
-Options
--------
+## Options
 
 -r, --requirement PATH   The requirements.txt file to update; Defaults to
                          using requirements.txt from the current directory
@@ -120,15 +97,13 @@ Options
 --version                Show the version and exit.
 --help                   Show this message and exit.
 
+## Contributing
 
-Contributing
-------------
-
-Before contributing a pull request, make sure tests pass::
+Before contributing a pull request, make sure tests pass:
 
     virtualenv venv
     . venv/bin/activate
     pip install tox
     tox
 
-Many thanks to all `contributors <https://github.com/alanhamlett/pip-update-requirements/blob/master/AUTHORS>`_!
+Many thanks to all [contributors](https://github.com/alanhamlett/pip-update-requirements/blob/master/AUTHORS)!
