@@ -26,6 +26,7 @@ def build_package_finder(session=None, index_urls=[]):
     search_scope = SearchScope.create(
         find_links=[],
         index_urls=index_urls,
+        no_index=False,
     )
     link_collector = LinkCollector(
         session=session,
