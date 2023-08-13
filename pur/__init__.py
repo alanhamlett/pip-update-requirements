@@ -14,7 +14,7 @@ import traceback
 from collections import defaultdict
 
 import click
-from click import echo as _echo
+from click import secho as _echo
 
 try:
     from StringIO import StringIO
@@ -45,7 +45,7 @@ from pip._internal.req.req_file import (COMMENT_RE, SCHEME_RE,
                                         handle_line)
 
 from .__about__ import __version__
-from .exceptions import StopUpdating
+from .exceptions import InvalidPackage, StopUpdating
 from .utils import (ExitCodeException, build_package_finder, can_check_version,
                     current_version, format_list_arg, join_lines,
                     latest_version, old_version, requirements_line,
@@ -140,8 +140,8 @@ def pur(**options):
             minor=options['minor'],
             patch=options['patch'],
             pre=options['pre'],
-            dry_run=options['dry_run'],
-            dry_run_changed=options['dry_run'] and options['dry_run_changed'],
+            dry_run=options['dry_run'] or options['dry_run_changed'],
+            dry_run_changed=options['dry_run_changed'],
             no_recursive=options['no_recursive'],
             echo=options['echo'],
             index_urls=options['index_url'],
@@ -156,7 +156,7 @@ def pur(**options):
             raise ExitCodeException(70, message=traceback.format_exc().rstrip())
         raise
 
-    if not options['dry_run']:
+    if not options['dry_run'] and not options['dry_run_changed']:
         _echo('All requirements up-to-date.')
 
     if options['nonzero_exit_code'] and PUR_GLOBAL_UPDATED > 0:
@@ -391,7 +391,22 @@ def _get_requirements_and_latest(filename, updates=[], force=False,
             continue
         spec_ver = current_version(install_req)
         if spec_ver or force:
-            latest_ver = latest_version(install_req, spec_ver, finder, minor=minor, patch=patch, pre=pre)
+            try:
+                latest_ver = latest_version(install_req, spec_ver, finder, minor=minor, patch=patch, pre=pre)
+            except InvalidPackage:
+                latest_ver = None
+
+                # output warning for invalid package
+                if not parsed_req.is_editable:
+                    _echo(
+                        'No matching distribution found for {req_name} from {comes_from}'.format(
+                            req_name=parsed_req.requirement,
+                            comes_from=parsed_req.comes_from,
+                        ),
+                        err=True,
+                        fg='red',
+                    )
+
             yield (orig_line, install_req, spec_ver, latest_ver)
 
 

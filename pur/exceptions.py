@@ -7,6 +7,11 @@
 """
 
 
+class InvalidPackage(Exception):
+    """The package has no releases."""
+    pass
+
+
 class StopUpdating(Exception):
     """Stop updating a requirements file and exit."""
     pass

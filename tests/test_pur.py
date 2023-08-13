@@ -559,7 +559,10 @@ class PurTestCase(utils.TestCase):
             mock_find_all_candidates.return_value = []
 
             result = self.runner.invoke(pur, args)
-            expected_output = "All requirements up-to-date.\n"
+            expected_output = 'No matching distribution found for flask==0.9 from -r ' + tmpfile + ' (line 1)\n' + \
+                'No matching distribution found for flask==12.0 from -r ' + tmpfile + ' (line 2)\n' + \
+                'No matching distribution found for flask from -r ' + tmpfile + ' (line 6)\n' + \
+                'All requirements up-to-date.\n'
             self.assertEqual(u(result.output), u(expected_output))
             self.assertIsNone(result.exception)
             self.assertEqual(result.exit_code, 0)
@@ -872,6 +875,89 @@ class PurTestCase(utils.TestCase):
             self.assertEqual(open(requirements).read(), expected_requirements)
             expected_requirements = open('tests/samples/requirements-nested.txt').read()
             self.assertEqual(open(requirements_nested).read(), expected_requirements)
+
+    def test_dry_run_invalid_package(self):
+        requirements = 'tests/samples/requirements.txt'
+        tempdir = tempfile.mkdtemp()
+        tmpfile = os.path.join(tempdir, 'requirements.txt')
+        shutil.copy(requirements, tmpfile)
+        args = ['-r', tmpfile, '--dry-run']
+
+        with patch('pip._internal.index.package_finder.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+            mock_find_all_candidates.return_value = []
+
+            result = self.runner.invoke(pur, args)
+            expected_output = 'No matching distribution found for flask==0.9 from -r ' + tmpfile + ' (line 1)\n' + \
+                'No matching distribution found for flask==12.0 from -r ' + tmpfile + ' (line 2)\n' + \
+                'No matching distribution found for flask from -r ' + tmpfile + ' (line 6)\n' + \
+                '==> ' + tmpfile + ' <==\n' + \
+                open('tests/samples/results/test_dry_run_invalid_package').read() + "\n"
+            self.assertEqual(u(result.output), u(expected_output))
+            self.assertIsNone(result.exception)
+            self.assertEqual(result.exit_code, 0)
+            self.assertEqual(open(tmpfile).read(), open(requirements).read())
+
+    def test_dry_run_changed(self):
+        requirements = 'tests/samples/requirements.txt'
+        tempdir = tempfile.mkdtemp()
+        tmpfile = os.path.join(tempdir, 'requirements.txt')
+        shutil.copy(requirements, tmpfile)
+        args = ['-r', tmpfile, '--dry-run-changed']
+
+        with patch('pip._internal.index.package_finder.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+            project = 'flask'
+            version = '0.10.1'
+            link = Link('')
+            candidate = InstallationCandidate(project, version, link)
+            mock_find_all_candidates.return_value = [candidate]
+
+            result = self.runner.invoke(pur, args)
+            self.assertIsNone(result.exception)
+            expected_output = '==> ' + tmpfile + ' <==\n' + \
+                open('tests/samples/results/test_dry_run_changed').read()
+            self.assertEqual(u(result.output), u(expected_output))
+            self.assertEqual(result.exit_code, 0)
+            self.assertEqual(open(tmpfile).read(), open(requirements).read())
+
+    def test_dry_run_changed_no_updates(self):
+        requirements = 'tests/samples/requirements-up-to-date.txt'
+        tempdir = tempfile.mkdtemp()
+        tmpfile = os.path.join(tempdir, 'requirements.txt')
+        shutil.copy(requirements, tmpfile)
+        args = ['-r', tmpfile, '--dry-run-changed']
+
+        with patch('pip._internal.index.package_finder.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+            project = 'flask'
+            version = '0.10.1'
+            link = Link('')
+            candidate = InstallationCandidate(project, version, link)
+            mock_find_all_candidates.return_value = [candidate]
+
+            result = self.runner.invoke(pur, args)
+            self.assertIsNone(result.exception)
+            expected_output = ''
+            self.assertEqual(u(result.output), u(expected_output))
+            self.assertEqual(result.exit_code, 0)
+            self.assertEqual(open(tmpfile).read(), open(requirements).read())
+
+    def test_dry_run_changed_invalid_package(self):
+        requirements = 'tests/samples/requirements.txt'
+        tempdir = tempfile.mkdtemp()
+        tmpfile = os.path.join(tempdir, 'requirements.txt')
+        shutil.copy(requirements, tmpfile)
+        args = ['-r', tmpfile, '--dry-run-changed']
+
+        with patch('pip._internal.index.package_finder.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+            mock_find_all_candidates.return_value = []
+
+            result = self.runner.invoke(pur, args)
+            expected_output = 'No matching distribution found for flask==0.9 from -r ' + tmpfile + ' (line 1)\n' + \
+                'No matching distribution found for flask==12.0 from -r ' + tmpfile + ' (line 2)\n' + \
+                'No matching distribution found for flask from -r ' + tmpfile + ' (line 6)\n'
+            self.assertEqual(u(result.output), u(expected_output))
+            self.assertIsNone(result.exception)
+            self.assertEqual(result.exit_code, 0)
+            self.assertEqual(open(tmpfile).read(), open(requirements).read())
 
     def test_updates_from_alt_index_url(self):
         requirements = 'tests/samples/requirements-with-alt-index-url.txt'

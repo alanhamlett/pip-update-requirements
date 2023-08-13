@@ -19,7 +19,7 @@ from pip._internal.models.selection_prefs import SelectionPreferences
 from pip._internal.req.req_file import COMMENT_RE
 from pip._vendor.packaging.version import InvalidVersion, Version, parse
 
-from .exceptions import StopUpdating
+from .exceptions import InvalidPackage, StopUpdating
 
 
 def build_package_finder(session=None, index_urls=[]):
@@ -141,6 +141,7 @@ def old_version(spec_ver):
 
 def latest_version(req, spec_ver, finder, minor=[], patch=[], pre=[]):
     """Returns a Version instance with the latest version for the package.
+    Raises InvalidPackage error if no candidates available.
 
     :param req:      Instance of pip.req.req_install.InstallRequirement.
     :param spec_ver: Tuple of current versions from the requirements file.
@@ -156,6 +157,8 @@ def latest_version(req, spec_ver, finder, minor=[], patch=[], pre=[]):
         return None
 
     all_candidates = finder.find_all_candidates(req.name)
+    if len(all_candidates) == 0:
+        raise InvalidPackage()
 
     if req.name.lower() in patch or '*' in patch:
         all_candidates = [c for c in all_candidates

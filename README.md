@@ -63,9 +63,8 @@ You can also use Pur directly from Python:
                              file.
     -d, --dry-run            Output changes to STDOUT instead of overwriting the
                              requirements.txt file.
-    --dry-run-changed        When running with --dry-run, only output packages
-                             with updates, not packages that are already the
-                             latest.
+    --dry-run-changed        Enable dry run and only output packages with
+                             updates, not packages that are already the latest.
     -n, --no-recursive       Prevents updating nested requirements files.
     --skip TEXT              Comma separated list of packages to skip updating.
     --skip-gt                Skip updating packages using > or >= spec, to allow
