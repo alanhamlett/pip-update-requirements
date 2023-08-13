@@ -3,6 +3,15 @@ History
 -------
 
 
+7.2.0 (2023-08-13)
+++++++++++++++++++
+
+- Print warning to stderr if package not found.
+  `#54 <https://github.com/alanhamlett/pip-update-requirements/pull/54>`_
+- Upgrade vendored certifi to version 2023.07.22.
+  `#55 <https://github.com/alanhamlett/pip-update-requirements/issues/55>`_
+
+
 7.1.1 (2023-07-19)
 ++++++++++++++++++
 
