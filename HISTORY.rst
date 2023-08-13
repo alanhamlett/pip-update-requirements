@@ -3,6 +3,13 @@ History
 -------
 
 
+7.2.1 (2023-08-13)
+++++++++++++++++++
+
+- Respect skip option in nested requirements files.
+  `#58 <https://github.com/alanhamlett/pip-update-requirements/issues/58>`_
+
+
 7.2.0 (2023-08-13)
 ++++++++++++++++++
 
