@@ -396,6 +396,12 @@ def _get_requirements_and_latest(filename, updates=[], force=False,
         if install_req.name is None or SCHEME_RE.match(install_req.name):
             yield (orig_line, None, None, None)
             continue
+
+        # skip checking pypi for excluded packages
+        if len(only) > 0 and install_req.name.lower() not in only:
+            yield (orig_line, None, None, None)
+            continue
+
         spec_ver = current_version(install_req)
         if spec_ver or force:
             try:
