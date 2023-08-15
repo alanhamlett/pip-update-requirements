@@ -3,6 +3,17 @@ History
 -------
 
 
+7.3.0 (2023-08-15)
+++++++++++++++++++
+
+- Upgrade pip to v23.2.1.
+  `#57 <https://github.com/alanhamlett/pip-update-requirements/pull/57>`_
+- Add support for Python 3.12.
+  `#57 <https://github.com/alanhamlett/pip-update-requirements/pull/57>`_
+- Skip checking pypi for excluded packages.
+  `#59 <https://github.com/alanhamlett/pip-update-requirements/pull/59>`_
+
+
 7.2.1 (2023-08-13)
 ++++++++++++++++++
 
