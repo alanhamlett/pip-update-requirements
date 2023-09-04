@@ -3,6 +3,13 @@ History
 -------
 
 
+7.3.1 (2023-09-04)
+++++++++++++++++++
+
+- Fix missing newlines when using --dry-run-changed option.
+  `#61 <https://github.com/alanhamlett/pip-update-requirements/issues/61>`_
+
+
 7.3.0 (2023-08-15)
 ++++++++++++++++++
 
