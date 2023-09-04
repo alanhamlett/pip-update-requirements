@@ -279,6 +279,7 @@ def _update_requirements(obuffer, updates, input_file=None,
                                                            spec_ver,
                                                            latest_ver)
                     obuffer.write(new_line)
+                    obuffer.write('\n')
 
                     if new_line != line:
                         msg = 'Updated {package}: {old} -> {new}'.format(
@@ -308,17 +309,17 @@ def _update_requirements(obuffer, updates, input_file=None,
 
                 elif not dry_run_changed:
                     obuffer.write(line)
+                    obuffer.write('\n')
+
             except StopUpdating:
                 stop = True
                 if not dry_run_changed:
                     obuffer.write(line)
+                    obuffer.write('\n')
 
         elif not output_buffer or not requirements_line(line, req):
             if not dry_run_changed:
                 obuffer.write(line)
-
-        if not output_buffer or not requirements_line(line, req):
-            if not dry_run_changed:
                 obuffer.write('\n')
 
     if dry_run and echo:

@@ -923,7 +923,7 @@ class PurTestCase(utils.TestCase):
             self.assertEqual(open(tmpfile).read(), open(requirements).read())
 
     def test_dry_run_changed(self):
-        requirements = 'tests/samples/requirements.txt'
+        requirements = 'tests/samples/requirements-multiple.txt'
         tempdir = tempfile.mkdtemp()
         tmpfile = os.path.join(tempdir, 'requirements.txt')
         shutil.copy(requirements, tmpfile)
@@ -938,8 +938,7 @@ class PurTestCase(utils.TestCase):
 
             result = self.runner.invoke(pur, args)
             self.assertIsNone(result.exception)
-            expected_output = '==> ' + tmpfile + ' <==\n' + \
-                open('tests/samples/results/test_dry_run_changed').read()
+            expected_output = '==> ' + tmpfile + ' <==\n' + open('tests/samples/results/test_dry_run_changed').read()
             self.assertEqual(u(result.output), u(expected_output))
             self.assertEqual(result.exit_code, 0)
             self.assertEqual(open(tmpfile).read(), open(requirements).read())

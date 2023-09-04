@@ -1,1 +1,4 @@
 flask==0.10.1
+Alembic==0.10.1
+sqlalchemy==0.10.1
+
