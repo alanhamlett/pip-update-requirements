@@ -6,7 +6,7 @@ all:
 	@echo 'release  publish the current version to pypi'
 
 test:
-	@nosetests
+	@pytest --cov=./pur
 
 upgrade:
 	@pur -s click -r dev-requirements.txt
