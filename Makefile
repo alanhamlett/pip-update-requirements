@@ -9,7 +9,7 @@ test:
 	@pytest --cov=./pur
 
 upgrade:
-	@pur -s click -r dev-requirements.txt
+	@pur --skip click -r dev-requirements.txt
 
 release: clean build upload
 
