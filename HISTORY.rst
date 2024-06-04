@@ -3,6 +3,14 @@ History
 -------
 
 
+7.3.2 (2024-06-04)
+++++++++++++++++++
+
+- Fix missing req file line when using --dry-run option with --output
+  and --no-recursion options.
+  `#63 <https://github.com/alanhamlett/pip-update-requirements/issues/63>`_
+
+
 7.3.1 (2023-09-04)
 ++++++++++++++++++
 
