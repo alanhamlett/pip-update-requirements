@@ -133,7 +133,6 @@ class PurTestCase(utils.TestCase):
 
     def test_updates_nested_requirements_to_output_file(self):
         tempdir = tempfile.mkdtemp()
-        tempdir = tempfile.mkdtemp()
         output = os.path.join(tempdir, 'output.txt')
         requirements = os.path.join(tempdir, 'requirements-with-nested-reqfile.txt')
         requirements_nested = os.path.join(tempdir, 'requirements-nested.txt')
@@ -159,6 +158,35 @@ class PurTestCase(utils.TestCase):
             self.assertEqual(open(requirements_nested).read(), open('tests/samples/requirements-nested.txt').read())
             self.assertEqual(open(requirements).read(), open('tests/samples/requirements-with-nested-reqfile.txt').read())
             self.assertEqual(open(output).read(), expected_requirements)
+
+    def test_updates_nested_requirements_to_output_file_with_no_recursive(self):
+        tempdir = tempfile.mkdtemp()
+        requirements = os.path.join(tempdir, 'requirements-with-nested-reqfile.txt')
+        requirements_nested = os.path.join(tempdir, 'requirements-nested.txt')
+        outfile = os.path.join(tempdir, 'outfile.txt')
+        shutil.copy('tests/samples/requirements-with-nested-reqfile.txt', requirements)
+        shutil.copy('tests/samples/requirements-nested.txt', requirements_nested)
+        args = ['-r', requirements, '-n', '--output', outfile]
+
+        with patch('pip._internal.index.package_finder.PackageFinder.find_all_candidates') as mock_find_all_candidates:
+            project = 'readtime'
+            version = '0.11'
+            link = Link('')
+            candidate = InstallationCandidate(project, version, link)
+            mock_find_all_candidates.return_value = [candidate]
+
+            result = self.runner.invoke(pur, args)
+            self.assertIsNone(result.exception)
+            expected_output = "Updated flask: 0.10.1 -> 0.11\nAll requirements up-to-date.\n"
+            self.assertEqual(u(result.output), u(expected_output))
+            self.assertEqual(result.exit_code, 0)
+
+            expected_requirements = open('tests/samples/requirements-with-nested-reqfile.txt').read()
+            self.assertEqual(open(requirements).read(), expected_requirements)
+            expected_requirements = open('tests/samples/requirements-nested.txt').read()
+            self.assertEqual(open(requirements_nested).read(), expected_requirements)
+            expected_outfile = open('tests/samples/results/test_updates_nested_requirements_to_output_file_with_no_recursive').read()
+            self.assertEqual(open(outfile).read(), expected_outfile)
 
     def test_exit_code_from_no_updates(self):
         tempdir = tempfile.mkdtemp()

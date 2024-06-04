@@ -202,6 +202,7 @@ def update_requirements(input_file=None, output_file=None, force=False,
         obuffer, updates,
         input_file=input_file,
         output_buffer=obuffer if output_file else None,
+        output_file=output_file,
         force=force,
         interactive=interactive,
         skip=skip,
@@ -219,7 +220,7 @@ def update_requirements(input_file=None, output_file=None, force=False,
         no_ssl_verify=no_ssl_verify,
     )
 
-    if not dry_run:
+    if not dry_run or output_file:
         if not output_file:
             output_file = input_file
         with open(output_file, 'w') as output:
@@ -258,6 +259,7 @@ def _update_requirements(obuffer, updates, input_file=None,
         no_ssl_verify=no_ssl_verify,
         no_recursive=no_recursive,
         output_buffer=output_buffer,
+        output_file=output_file,
         echo=echo,
         dry_run=dry_run,
         dry_run_changed=dry_run_changed,
@@ -317,7 +319,7 @@ def _update_requirements(obuffer, updates, input_file=None,
                     obuffer.write(line)
                     obuffer.write('\n')
 
-        elif not output_buffer or not requirements_line(line, req):
+        elif not output_buffer or not requirements_line(line, req) or output_file:
             if not dry_run_changed:
                 obuffer.write(line)
                 obuffer.write('\n')
