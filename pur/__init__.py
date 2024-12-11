@@ -447,7 +447,7 @@ def _parse_requirements(filename, finder, session, updates=None, **options):
 
 class PatchedRequirementsFileParser(RequirementsFileParser):
 
-    def _parse_and_recurse(self, filename, constraint):
+    def _parse_and_recurse(self, filename, constraint, *args, **kwargs):
         for line, orig_line in self._parse_file(filename, constraint):
             if (
                 line is not None and
