@@ -3,6 +3,13 @@ History
 -------
 
 
+7.3.3 (2024-12-12)
+++++++++++++++++++
+
+- Add compatibility with pip 24.
+  `#65 <https://github.com/alanhamlett/pip-update-requirements/pull/65>`_
+
+
 7.3.2 (2024-06-04)
 ++++++++++++++++++
 
