@@ -104,6 +104,11 @@ PUR_GLOBAL_UPDATED = 0
               'Use "*" to allow all packages to be updated to pre-release ' +
               'versions. By default packages are only updated to stable ' +
               'versions.')
+@click.option('--cooldown-days', type=click.INT, default=0,
+              help='Minimum number of days since release before a new ' +
+              'version is considered for updating. Versions released more ' +
+              'recently than this threshold are ignored, helping avoid ' +
+              'recently published versions that may contain critical bugs.')
 @click.option('-z', '--nonzero-exit-code', is_flag=True, default=False,
               help='Exit with status 1 when some packages were updated, 0 ' +
               'when no packages updated, or a number greater than 1 when ' +
@@ -122,6 +127,9 @@ def pur(**options):
     format_list_arg(options, 'minor')
     format_list_arg(options, 'patch')
     format_list_arg(options, 'pre')
+
+    if options['cooldown_days'] < 0:
+        raise ExitCodeException(2, message='--cooldown-days must be a non-negative integer.')
 
     options['echo'] = True
 
@@ -147,6 +155,7 @@ def pur(**options):
             index_urls=options['index_url'],
             cert=options['cert'],
             no_ssl_verify=options['no_ssl_verify'],
+            cooldown_days=options['cooldown_days'],
         )
 
     except InstallationError as e:
@@ -168,7 +177,7 @@ def update_requirements(input_file=None, output_file=None, force=False,
                         dry_run=False, dry_run_changed=False,
                         minor=[], patch=[], pre=[], no_recursive=False,
                         echo=False, index_urls=[], cert=None,
-                        no_ssl_verify=False):
+                        no_ssl_verify=False, cooldown_days=0):
     """Update a requirements file.
     Returns a dict of package update info.
     :param input_file:       Path to a requirements.txt file.
@@ -193,6 +202,9 @@ def update_requirements(input_file=None, output_file=None, force=False,
     :param cert:             Path to PEM-encoded CA certificate bundle. If
                              provided, overrides the default.
     :param no_ssl_verify:    Disable verifying the server's TLS certificate.
+    :param cooldown_days:    Minimum number of days since release before a new
+                             version is considered. Versions newer than this
+                             are ignored.
     """
 
     obuffer = StringIO()
@@ -218,6 +230,7 @@ def update_requirements(input_file=None, output_file=None, force=False,
         index_urls=index_urls,
         cert=cert,
         no_ssl_verify=no_ssl_verify,
+        cooldown_days=cooldown_days,
     )
 
     if not dry_run or output_file:
@@ -238,7 +251,8 @@ def _update_requirements(obuffer, updates, input_file=None,
                          minor=[], patch=[], pre=[],
                          dry_run=False, dry_run_changed=False,
                          echo=False, index_urls=[], cert=None,
-                         no_recursive=False, no_ssl_verify=False):
+                         no_recursive=False, no_ssl_verify=False,
+                         cooldown_days=0):
     global PUR_GLOBAL_UPDATED
 
     updated = 0
@@ -263,6 +277,7 @@ def _update_requirements(obuffer, updates, input_file=None,
         echo=echo,
         dry_run=dry_run,
         dry_run_changed=dry_run_changed,
+        cooldown_days=cooldown_days,
     )
 
     stop = False
@@ -339,7 +354,8 @@ def _get_requirements_and_latest(filename, updates=[], force=False,
                                  index_urls=[], cert=None, no_ssl_verify=False,
                                  no_recursive=False, output_file=None,
                                  output_buffer=None, echo=False,
-                                 dry_run=False, dry_run_changed=False):
+                                 dry_run=False, dry_run_changed=False,
+                                 cooldown_days=0):
     """Parse a requirements file and get latest version for each requirement.
 
     Yields a tuple of (original line, InstallRequirement instance,
@@ -384,6 +400,7 @@ def _get_requirements_and_latest(filename, updates=[], force=False,
         echo=echo,
         dry_run=dry_run,
         dry_run_changed=dry_run_changed,
+        cooldown_days=cooldown_days,
     )
 
     for parsed_req, orig_line in requirements:
@@ -408,7 +425,8 @@ def _get_requirements_and_latest(filename, updates=[], force=False,
         spec_ver = current_version(install_req)
         if spec_ver or force:
             try:
-                latest_ver = latest_version(install_req, spec_ver, finder, minor=minor, patch=patch, pre=pre)
+                latest_ver = latest_version(install_req, spec_ver, finder, minor=minor, patch=patch, pre=pre,
+                                            cooldown_days=cooldown_days, session=session)
             except InvalidPackage:
                 latest_ver = None
 

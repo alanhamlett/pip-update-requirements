@@ -9,6 +9,7 @@
 
 
 import re
+from datetime import datetime, timedelta, timezone
 
 import click
 from click import echo as _echo
@@ -140,19 +141,50 @@ def old_version(spec_ver):
     return 'Unknown'
 
 
-def latest_version(req, spec_ver, finder, minor=[], patch=[], pre=[]):
+def get_package_release_dates(package_name, session):
+    """Fetch upload dates for all versions of a package from the PyPI JSON API.
+
+    Returns a dict mapping version string to a timezone-aware datetime, or an
+    empty dict if the information cannot be retrieved (e.g. custom index).
+
+    :param package_name:  The package name.
+    :param session:       A PipSession instance used to make the HTTP request.
+    """
+    try:
+        url = 'https://pypi.org/pypi/{0}/json'.format(package_name)
+        response = session.get(url, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        result = {}
+        for version, files in data.get('releases', {}).items():
+            if files:
+                upload_time = files[0].get('upload_time')
+                if upload_time:
+                    dt = datetime.fromisoformat(upload_time).replace(tzinfo=timezone.utc)
+                    result[version] = dt
+        return result
+    except Exception:
+        return {}
+
+
+def latest_version(req, spec_ver, finder, minor=[], patch=[], pre=[],
+                   cooldown_days=0, session=None):
     """Returns a Version instance with the latest version for the package.
     Raises InvalidPackage error if no candidates available.
 
-    :param req:      Instance of pip.req.req_install.InstallRequirement.
-    :param spec_ver: Tuple of current versions from the requirements file.
-    :param finder:   Instance of pip.download.PackageFinder.
-    :param minor:    List of packages to only update minor and patch versions,
-                     never major.
-    :param patch:    List of packages to only update patch versions, never
-                     minor or major.
-    :param pre:      List of packages to allow updating to pre-release
-                     versions.
+    :param req:           Instance of pip.req.req_install.InstallRequirement.
+    :param spec_ver:      Tuple of current versions from the requirements file.
+    :param finder:        Instance of pip.download.PackageFinder.
+    :param minor:         List of packages to only update minor and patch
+                          versions, never major.
+    :param patch:         List of packages to only update patch versions, never
+                          minor or major.
+    :param pre:           List of packages to allow updating to pre-release
+                          versions.
+    :param cooldown_days: Minimum age in days a release must have before it is
+                          considered for an update. Releases newer than this
+                          threshold are ignored.
+    :param session:       A PipSession instance, required when cooldown_days>0.
     """
     if not req:  # pragma: no cover
         return None
@@ -171,6 +203,15 @@ def latest_version(req, spec_ver, finder, minor=[], patch=[], pre=[]):
     if req.name.lower() not in pre and '*' not in pre:
         all_candidates = [candidate for candidate in all_candidates
                           if not candidate.version.is_prerelease]
+
+    if cooldown_days > 0 and session is not None:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=cooldown_days)
+        release_dates = get_package_release_dates(req.name, session)
+        if release_dates:
+            all_candidates = [
+                c for c in all_candidates
+                if release_dates.get(str(c.version), cutoff) <= cutoff
+            ]
 
     if not all_candidates:
         return None
