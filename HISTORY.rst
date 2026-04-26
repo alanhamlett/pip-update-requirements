@@ -3,6 +3,15 @@ History
 -------
 
 
+7.4.0 (2026-04-26)
+++++++++++++++++++
+
+- Add new --cooldown-days option.
+  `#71 <https://github.com/alanhamlett/pip-update-requirements/pull/71>`_
+- Add basic pyproject.toml to explicitly opting into PEP 517.
+  `#68 <https://github.com/alanhamlett/pip-update-requirements/pull/68>`_
+
+
 7.3.3 (2024-12-12)
 ++++++++++++++++++
 
