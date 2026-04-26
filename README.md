@@ -87,6 +87,11 @@ You can also use Pur directly from Python:
                              packages to be updated to pre-release versions. By
                              default packages are only updated to stable
                              versions.
+    --cooldown-days INTEGER  Minimum number of days since release before a new
+                             version is considered for updating. Versions
+                             released more recently than this threshold are
+                             ignored, helping avoid recently published versions
+                             that may contain critical bugs.
     -z, --nonzero-exit-code  Exit with status 1 when some packages were updated,
                              0 when no packages updated, or a number greater
                              than 1 when there was an error. By default, exit
