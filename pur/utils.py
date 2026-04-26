@@ -265,7 +265,11 @@ def ask_to_update(req, spec_ver, latest_ver):
         choices=', '.join(choices),
     )
     while True:
-        value = click.prompt(msg, default='y')
+        try:
+            value = click.prompt(msg, default='y')
+        except click.Abort:
+            _echo('')
+            value = 'y'
         value = value.lower()
         if value in choices:
             break
@@ -346,8 +350,9 @@ def format_list_arg(options, key):
 
 class ExitCodeException(click.ClickException):
     def __init__(self, exit_code, message=None):
+        super().__init__(message)
+        self.code = exit_code
         self.exit_code = exit_code
-        self.message = message
 
     def show(self, **kwargs):
         if self.message:
