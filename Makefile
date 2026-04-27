@@ -17,7 +17,7 @@ clean:
 	@rm -f dist/*
 
 build:
-	@python ./setup.py sdist
+	@python -m build
 
 upload:
 	@twine upload ./dist/*
